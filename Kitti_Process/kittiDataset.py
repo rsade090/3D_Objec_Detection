@@ -29,7 +29,7 @@ class KittiDataset(Dataset):
         assert mode in ['train', 'val', 'test'], 'Invalid mode: {}'.format(mode)
         self.mode = mode
         self.is_test = (self.mode == 'test')
-        sub_folder = 'testing' if self.is_test else 'training'
+        sub_folder = 'training' #'testing' if self.is_test else 'training'
 
         self.lidar_aug = lidar_aug
         self.hflip_prob = hflip_prob
@@ -74,6 +74,7 @@ class KittiDataset(Dataset):
         sample_id = int(self.sample_id_list[index])
         img_path = os.path.join(self.image_dir, '{:06d}.png'.format(sample_id))
         lidarData = self.get_lidar(sample_id)
+        img_path, img_rgb = self.get_image(sample_id)
         calib = self.get_calib(sample_id)
         labels, has_labels = self.get_label(sample_id)
         if has_labels:
@@ -84,23 +85,22 @@ class KittiDataset(Dataset):
 
         lidarData, labels = get_filtered_lidar(lidarData, cnf.boundary, labels)
 
-        bev_map = makeBEVMap(lidarData, cnf.boundary)
-        bev_map = torch.from_numpy(bev_map)
+        # bev_map = makeBEVMap(lidarData, cnf.boundary)
+        # bev_map = torch.from_numpy(bev_map)
 
-        hflipped = False
-        if np.random.random() < self.hflip_prob:
-            hflipped = True
-            # C, H, W
-            bev_map = torch.flip(bev_map, [-1])
+        # use our BEV ......................................... 
+        bev_map = self.get_BEV(index)
 
-        targets = self.build_targets(labels, hflipped)
+        #use our FOV ..........................................
+        fov_maps = self.get_FOV(index)
+
+        targets = self.build_targets(labels, False)
 
         metadatas = {
             'img_path': img_path,
-            'hflipped': hflipped
         }
 
-        return metadatas, bev_map, targets
+        return metadatas,fov_maps, bev_map, img_rgb, targets
 
     def get_image(self, idx):
         img_path = os.path.join(self.image_dir, '{:06d}.png'.format(idx))
