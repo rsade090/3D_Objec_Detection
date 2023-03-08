@@ -20,6 +20,7 @@ configs.output_width = 608
 
 configs.dataset_dir = "/home/hooshyarin/Documents/KITTI/"
 
+
 dataset = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0., num_samples=configs.num_samples)
 
 print('\n\nPress n to see the next sample >>> Press Esc to quit...')
