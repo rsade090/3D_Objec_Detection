@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 torch.backends.cudnn.benchmark = True
 
-from config.config import GlobalConfig
+from config.Transfuse_config import GlobalConfig
 from models.TransfuserModel import TransFuser
 from easydict import EasyDict as edict
 
