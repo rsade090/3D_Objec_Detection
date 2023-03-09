@@ -13,6 +13,8 @@ torch.backends.cudnn.benchmark = True
 
 from config.aim_config import GlobalConfig
 from models.TransfuserModel import TransFuser
+from easydict import EasyDict as edict
+
 #from data import CARLA_Data
 from Kitti_Process.kittiDataset import KittiDataset
 from torchvision import models, transforms
@@ -101,7 +103,8 @@ class Engine(object):
             img = torch.permute(img, (0,3, 1, 2))
             img = transform(img)
 
-            pred_wp = model(fronts+lefts+rights+rears, lidars, target_point, gt_velocity)
+            ######pred_wp = model(fronts+lefts+rights+rears, lidars, target_point, gt_velocity)
+            pred_wp = model(img, bev, target)
 
             gt_waypoints = [torch.stack(data['waypoints'][i], dim=1).to(args.device, dtype=torch.float32) for i in range(config.seq_len, len(data['waypoints']))]
             gt_waypoints = torch.stack(gt_waypoints, dim=1).to(args.device, dtype=torch.float32)
@@ -119,7 +122,8 @@ class Engine(object):
         loss_epoch = loss_epoch / num_batches
         self.train_loss.append(loss_epoch)
         self.cur_epoch += 1
-
+    
+    """""
     def validate(self):
         model.eval()
 
@@ -174,6 +178,8 @@ class Engine(object):
             writer.add_scalar('val_loss', wp_loss, self.cur_epoch)
             
             self.val_loss.append(wp_loss)
+"""
+
 
     def save(self):
 
@@ -223,6 +229,8 @@ configs.max_objects = 50
 configs.num_classes = 3
 configs.output_width = 608
 configs.dataset_dir = "/home/hooshyarin/Documents/KITTI/"
+#configs.dataset_dir= "/home/sadeghianr/Desktop/Datasets/Kitti/"
+
 # Data
 # train_set = CARLA_Data(root=config.train_data, config=config)
 # val_set = CARLA_Data(root=config.val_data, config=config)
