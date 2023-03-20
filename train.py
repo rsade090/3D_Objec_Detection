@@ -16,6 +16,12 @@ from models.TransfuserModel import TransFuser
 from easydict import EasyDict as edict
 from Kitti_Process.kittiDataset import KittiDataset
 from torchvision import models, transforms
+import torchvision
+from torch import nn
+from torch.nn import functional as F
+from torchvision.models.detection import FasterRCNN
+from torchvision.models.detection.rpn import AnchorGenerator
+from models.ObjectDetModel import ObjDet
 torch.cuda.empty_cache()
 
 parser = argparse.ArgumentParser()
@@ -38,6 +44,65 @@ transform = transforms.Compose([
   #transforms.ToTensor()                              
 ])
 
+
+def create_model(num_classes, backboneNew):
+
+    conv1 = torchvision.models.resnet18(pretrained=True).conv1
+    bn1 = torchvision.models.resnet18(pretrained=True).bn1
+    resnet18_relu = torchvision.models.resnet18(pretrained=True).relu
+    resnet18_max_pool = torchvision.models.resnet18(pretrained=True).maxpool
+    layer1 = torchvision.models.resnet18(pretrained=True).layer1
+    layer2 = torchvision.models.resnet18(pretrained=True).layer2
+    layer3 = torchvision.models.resnet18(pretrained=True).layer3
+    layer4 = torchvision.models.resnet18(pretrained=True).layer4
+
+    backbone = nn.Sequential(
+        conv1, bn1, resnet18_relu, resnet18_max_pool, 
+        layer1, layer2, layer3, layer4
+    )
+    backbone.out_channels = 512
+
+    # Generate anchors using the RPN. Here, we are using 5x3 anchors.
+    # Meaning, anchors with 5 different sizes and 3 different aspect 
+    # ratios.
+    anchor_generator = AnchorGenerator(
+        sizes=((32, 64, 128, 256, 512),),
+        aspect_ratios=((0.5, 1.0, 2.0),)
+    )
+
+    # Feature maps to perform RoI cropping.
+    # If backbone returns a Tensor, `featmap_names` is expected to
+    # be [0]. We can choose which feature maps to use.
+    roi_pooler = torchvision.ops.MultiScaleRoIAlign(
+        featmap_names=['0'],
+        output_size=7,
+        sampling_ratio=2
+    )
+
+    # Pascal VOC Faster RCNN model.
+    model = FasterRCNN(
+        backbone=backbone,
+        num_classes=21,
+        rpn_anchor_generator=anchor_generator,
+        box_roi_pool=roi_pooler
+    )
+
+    # Load the PASCAL VOC pretrianed weights.
+    # print('Loading PASCAL VOC pretrained weights...')
+    # checkpoint = torch.load('../input/pretrained_voc_weights/last_model_state.pth')
+    # model.load_state_dict(checkpoint['model_state_dict'])
+
+    # Replace the Faster RCNN head with required class number. Final model.
+    model = FasterRCNN(
+        backbone=backbone,
+        num_classes=num_classes,
+        rpn_anchor_generator=anchor_generator,
+        box_roi_pool=roi_pooler
+    )
+    print(roi_pooler)
+    return model
+
+
 class Engine(object):
 
     def __init__(self,  cur_epoch=0, cur_iter=0):
@@ -51,29 +116,33 @@ class Engine(object):
     def train(self):
         loss_epoch = 0.
         num_batches = 0
-        model.train()
+        model.to(args.device).train()
         for data in tqdm(dataloader_train):
             for p in model.parameters():
                 p.grad = None
 
             metadata, fov, bev, img, target = data
-            img = torch.permute(img, (0,3, 1, 2))
-            img = transform(img)
-            imgs = img.to(args.device, dtype=torch.float32)
+            imgs = torch.permute(img, (0,3, 1, 2))
+            imgs = transform(imgs)   
+            imgs = imgs.to(args.device, dtype=torch.float32)
             bevs = (transform(torch.permute(bev[0], (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
-            pred_wp = model([imgs],[bevs])
-            # gt_waypoints = [torch.stack(data['waypoints'][i], dim=1).to(args.device, dtype=torch.float32) for i in range(config.seq_len, len(data['waypoints']))]
-            # gt_waypoints = torch.stack(gt_waypoints, dim=1).to(args.device, dtype=torch.float32)
-            # loss = F.l1_loss(pred_wp, gt_waypoints, reduction='none').mean()
-            # loss.backward()
-            # loss_epoch += float(loss.item())
-            # num_batches += 1
-            # optimizer.step()
-            # writer.add_scalar('train_loss', loss.item(), self.cur_iter)
-            # self.cur_iter += 1
+            target['boxes'] = [v.to(args.device, dtype=torch.float32) for v in target['boxes']]
+            target['labels'] = [t.to(args.device, dtype=torch.int64) for t in target['labels']]
+            input = [[imgs], [bevs]]
+            output = model(input)
+            pred_scores, pred_boxes = output
+            # gt_boxes = [torch.stack(target['boxes'][i].reshape(-1,24), dim=1).to(args.device, dtype=torch.float32) for i in range(0, len(target['boxes']))]
+            # gt_boxes = torch.stack(gt_boxes, dim=1).to(args.device, dtype=torch.float32)
+            loss = F.l1_loss(pred_boxes, target['boxes'][0].reshape(-1,24), reduction='none').mean()
+            loss.backward()
+            loss_epoch += float(loss.item())
+            num_batches += 1
+            optimizer.step()
+            writer.add_scalar('train_loss', loss.item(), self.cur_iter)
+            self.cur_iter += 1
                
-        # loss_epoch = loss_epoch / num_batches
-        # self.train_loss.append(loss_epoch)
+        loss_epoch = loss_epoch / num_batches
+        self.train_loss.append(loss_epoch)
         self.cur_epoch += 1
 
     def validate(self):
@@ -166,16 +235,22 @@ configs.num_classes = 3
 configs.output_width = 608
 configs.dataset_dir = "/home/hooshyarin/Documents/KITTI/"
 
-train_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0., num_samples=configs.num_samples)
+train_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0., num_samples=configs.num_samples)
 dataloader_train = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
 val_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0., num_samples=configs.num_samples)
 dataloader_val = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True)
 
 # Model
-model = TransFuser(config, args.device)
+#model = TransFuser(config, args.device)
+#fastRCNN with custom backbone
+
+# model = create_model(1,None)
+transfModel = TransFuser(config, args.device)
+model = ObjDet(transfModel, 1)
 optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 trainer = Engine()
+
 
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 params = sum([np.prod(p.size()) for p in model_parameters])
