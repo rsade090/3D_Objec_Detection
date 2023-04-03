@@ -1,6 +1,9 @@
 import math
-
 import numpy as np
+
+
+Raw_DataSet_Dir = "/home/hooshyarin/Documents/KITTI/training/"
+Processed_DataSet_Dir = "/home/hooshyarin/Documents/KITTI/processed/"
 
 # Car and Van ==> Car class
 # Pedestrian and Person_Sitting ==> Pedestrian Class
@@ -8,26 +11,45 @@ CLASS_NAME_TO_ID = {
     'Pedestrian': 0,
     'Car': 1,
     'Cyclist': 2,
-    'Van': 1,
-    'Truck': -3,
-    'Person_sitting': 0,
-    'Tram': -99,
-    'Misc': -99,
-    'DontCare': -1
+    'Van': 3,
+    'Truck': 4,
+    'Person_sitting':5,
+    'Tram': 6,
+    'Misc': 7,
+    'DontCare': 8
 }
 
 colors = [[0, 255, 255], [0, 0, 255], [255, 0, 0], [255, 120, 0],
           [255, 120, 120], [0, 120, 0], [120, 255, 255], [120, 0, 255]]
 
 #####################################################################################
+TOP_Y_MIN = -30
+TOP_Y_MAX = +30
+TOP_X_MIN = 0
+TOP_X_MAX = 100
+TOP_Z_MIN = -3.5
+TOP_Z_MAX = 0.6
+
+TOP_X_DIVISION = 0.2
+TOP_Y_DIVISION = 0.2
+TOP_Z_DIVISION = 0.3
 boundary = {
     "minX": 0,
-    "maxX": 50,
-    "minY": -25,
-    "maxY": 25,
-    "minZ": -2.73,
-    "maxZ": 1.27
+    "maxX": 100,
+    "minY": -30,
+    "maxY": +30,
+    "minZ": -3.5,
+    "maxZ": 0.6
 }
+
+# boundary = {
+#     "minX": 0,
+#     "maxX": 50,
+#     "minY": -25,
+#     "maxY": 25,
+#     "minZ": -2.73,
+#     "maxZ": 1.27
+# }
 
 bound_size_x = boundary['maxX'] - boundary['minX']
 bound_size_y = boundary['maxY'] - boundary['minY']
