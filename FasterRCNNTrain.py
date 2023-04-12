@@ -26,11 +26,11 @@ from torch.nn.utils.rnn import pad_sequence
 writer = SummaryWriter()
 
 parser.add_argument('--id', type=str, default='transfuser', help='Unique experiment identifier.')
-parser.add_argument('--device', type=str, default='cpu', help='Device to use')
+parser.add_argument('--device', type=str, default='cuda', help='Device to use')
 parser.add_argument('--epochs', type=int, default=101, help='Number of train epochs.')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate.')
 parser.add_argument('--val_every', type=int, default=5, help='Validation frequency (epochs).')
-parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
+parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
 parser.add_argument('--logdir', type=str, default='log', help='Directory to log data to.')
 
 args = parser.parse_args()
@@ -41,13 +41,13 @@ configs.num_classes = 3
 configs.dataset_dir = "/home/hooshyarin/Documents/KITTI/"
 
 train_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
-dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn) #, num_workers=2, pin_memory=True
+dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=2, pin_memory=True)
 
 # create anchor boxes
 anc_scales = [2, 4, 6]
 anc_ratios = [0.5, 1, 1.5]
 n_anc_boxes = len(anc_scales) * len(anc_ratios) # number of anchor boxes for each anchor point
-out_c, out_h, out_w = 2048, 15, 20
+out_c, out_h, out_w = 256, 16, 16 #2048, 15, 20
 anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(out_h, out_w))
 anc_base = gen_anc_base(anc_pts_x, anc_pts_y, anc_scales, anc_ratios, (out_h, out_w))
 
@@ -60,17 +60,19 @@ idx2name = {v:k for k, v in name2idx.items()}
 n_classes = len(name2idx) - 1 # exclude pad idx
 roi_size = (2, 2)
 
+
 detector = TwoStageDetector(img_size, out_size, out_c, n_classes, roi_size)
 detector.to(args.device)
 optimizer = optim.Adam(detector.parameters(), lr=0.0001)
 transform = transforms.Compose([
-  transforms.Resize((480,640)),                         
+  transforms.Resize((256,256)),                         
+  #transforms.Resize((480,640)),                         
 ])
 
 def display_img(img_data, fig, axes):
     for i, img in enumerate(img_data):
         if type(img) == torch.Tensor:
-            img = img.permute(1, 2, 0).numpy()
+          img = img.permute(1, 2, 0)
         axes[i].imshow(img)
     
     return fig, axes
@@ -97,62 +99,83 @@ def display_bbox(bboxes, fig, ax, classes=None, in_format='xyxy', color='y', lin
     return fig, ax
 
 BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3]]
-def draw_rect(img, corners):
+def draw_rect(img, corners, filename):
   minx = min(corners[0][0][:,0]).numpy()
   miny = min(corners[0][0][:,1]).numpy()
   maxx = max(corners[0][0][:,0]).numpy()
   maxy = max(corners[0][0][:,1]).numpy()
   img3 = cv2.rectangle(img[0].cpu().numpy(), (int(minx), int(miny)), (int(maxx), int(maxy)), (255,0,0),1)
-  cv2.imwrite('rectImg.jpg', img3)       
+  cv2.imwrite(filename+'.jpg', img3)       
   return
 
-def draw_Cube(img, corners):
+def draw_Cube(img, corners,filename):
   for start, end in BOX_CONNECTIONS:
     x1, y1 = corners[0][0][start,:]
     x2, y2 = corners[0][0][end,:]      
     im = cv2.line(img[0].cpu().numpy(), (int(x1), int(y1)), (int(x2), int(y2)), (0,0,255), 1)  
-    cv2.imwrite('cubedImg.jpg',im)
+    cv2.imwrite(filename+'.jpg',im)
   return      
 
-epochs = 50
-loss_list = []
-for i in range(epochs):
-  total_loss = 0
-  count = 0
-  for data in tqdm(dataloader_train):        
-      img, targetBox, targetLabel = data
-      #draw_rect(img, targetBox)
-      #draw_Cube(img, targetBox)
-      imgs = img.to(args.device, dtype=torch.float32)
-      imgs = torch.permute(imgs, (0,3, 1, 2))
-      targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
-      targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
-      detector.train()
-      loss = detector(imgs, targetB, targetL)
-      optimizer.zero_grad()
-      loss.backward()
-      optimizer.step()
-      total_loss += loss.item()
-      count += 1
-      # if count == 10:
-      #   detector.eval()
-      #   proposals_final, conf_scores_final, classes_final = detector.inference(imgs, conf_thresh=0.6, nms_thresh=0.05) 
-      #   # project proposals to the image space
-      #   proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
-      #   prop_proj_1 = project_bboxes(proposals_final, width_scale_factor, height_scale_factor, mode='a2p')
-      #   prop_proj_2 = project_bboxes(proposals_final, width_scale_factor, height_scale_factor, mode='a2p')
-      #   # get classes
-      #   classes_pred_1 = [idx2name[cls] for cls in classes_final[0].tolist()]
-      #   classes_pred_2 = [idx2name[cls] for cls in classes_final[1].tolist()]
-      #   nrows, ncols = (2, 2)
-      #   fig, axes = plt.subplots(nrows, ncols, figsize=(16, 8))
-      #   fig, axes = display_img(imgs, fig, axes)
-      #   fig, _ = display_bbox(prop_proj_1[0], fig, axes[0], classes=classes_pred_1)
-      #   fig, _ = display_bbox(prop_proj_2[1], fig, axes[1], classes=classes_pred_2)
+TrainMode = True
+#detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model49.pt"))
+if TrainMode:
+  epochs = 50
+  loss_list = []
+  for i in range(epochs):
+    total_loss = 0
+    count = 0
+    for data in tqdm(dataloader_train):        
+        img, bev, fov, targetBox, targetLabel = data
+        imgs =  (transform(torch.permute(img, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
+        bevs = (transform(torch.permute(bev, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
+        targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
+        targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
+        detector.train()
+        loss = detector(imgs, bevs, targetB, targetL)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+        count += 1
+    writer.add_scalar("Loss/train", total_loss/len(dataloader_train), i)
+    #save model
+    torch.save(detector.state_dict(), "/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model"+str(i)+".pt")
+    loss_list.append(total_loss/len(dataloader_train))
+  writer.flush()  
+  print()
 
-  writer.add_scalar("Loss/train", total_loss/len(dataloader_train), i)
-  #save model
-  torch.save(detector.state_dict(), "/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model"+str(i)+".pt")
-  loss_list.append(total_loss/len(dataloader_train))
-writer.flush()  
-print()
+# Test and inference the model
+# load the model
+detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model49.pt"))
+for data in tqdm(dataloader_train):
+        img, targetBox, targetLabel = data
+        im = img.clone()
+        draw_rect(im, targetBox, "beforeTrainRect")
+        draw_Cube(im, targetBox, "beforeTrainCube")
+        imgs = img.to(args.device, dtype=torch.float32)
+        imgs = torch.permute(imgs, (0,3, 1, 2))
+        targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
+        targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
+        detector.eval()
+        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, conf_thresh=0.98, nms_thresh=0.05) 
+        # project proposals to the image space
+        proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
+        prop_proj_1 = project_bboxes(proposals_final, width_scale_factor, height_scale_factor, mode='a2p')
+        
+        #get classes
+        classes_pred_1 = [idx2name[cls] for cls in classes_final[0].tolist()]
+        # prop_proj_1[0][0][0] = int(float(prop_proj_1[0][0][0])) / (img[0].shape[1]/ 1242)
+        # prop_proj_1[0][0][1] = int(float(prop_proj_1[0][0][1])) / (img[0].shape[1]/ 1242)
+        # prop_proj_1[0][0][2] = int(float(prop_proj_1[0][0][2])) / (img[0].shape[0]/ 375)
+        # prop_proj_1[0][0][3] = int(float(prop_proj_1[0][0][3])) / (img[0].shape[0]/ 375)
+        bboxes = ops.box_convert(prop_proj_1[0], in_fmt='xyxy', out_fmt='xyxy')
+        #img3 = cv2.rectangle(img[0].cpu().numpy(), (int(bboxes[0][0]), int(bboxes[0][1])), (int(bboxes[0][2]), int(bboxes[0][3])), (255,0,0),1)
+        for i in range(prop_proj_1[0].shape[0]):
+          img4 = cv2.rectangle(img[0].cpu().numpy(), (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])), (int(prop_proj_1[0][i][2]), int(prop_proj_1[0][i][3])), (0,255,0),1)
+          cv2.putText(img4, classes_pred_1[i], (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
+        print()
+        # nrows, ncols = (2, 2)
+        # fig, axes = plt.subplots(nrows, ncols, figsize=(16, 8))
+        # fig, axes = display_img(imgs, fig, axes)
+        # fig, _ = display_bbox(prop_proj_1[0], fig, axes[0], classes=classes_pred_1)
+

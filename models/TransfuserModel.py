@@ -258,42 +258,42 @@ class Encoder(nn.Module):
                             attn_pdrop=config.attn_pdrop, 
                             resid_pdrop=config.resid_pdrop,
                             config=config)
-        self.transformer3 = GPT(n_embd=256,
-                            n_head=config.n_head, 
-                            block_exp=config.block_exp, 
-                            n_layer=config.n_layer, 
-                            vert_anchors=config.vert_anchors, 
-                            horz_anchors=config.horz_anchors, 
-                            seq_len=config.seq_len, 
-                            embd_pdrop=config.embd_pdrop, 
-                            attn_pdrop=config.attn_pdrop, 
-                            resid_pdrop=config.resid_pdrop,
-                            config=config)
-        self.transformer4 = GPT(n_embd=512,
-                            n_head=config.n_head, 
-                            block_exp=config.block_exp, 
-                            n_layer=config.n_layer, 
-                            vert_anchors=config.vert_anchors, 
-                            horz_anchors=config.horz_anchors, 
-                            seq_len=config.seq_len, 
-                            embd_pdrop=config.embd_pdrop, 
-                            attn_pdrop=config.attn_pdrop, 
-                            resid_pdrop=config.resid_pdrop,
-                            config=config)
+        # self.transformer3 = GPT(n_embd=256,
+        #                     n_head=config.n_head, 
+        #                     block_exp=config.block_exp, 
+        #                     n_layer=config.n_layer, 
+        #                     vert_anchors=config.vert_anchors, 
+        #                     horz_anchors=config.horz_anchors, 
+        #                     seq_len=config.seq_len, 
+        #                     embd_pdrop=config.embd_pdrop, 
+        #                     attn_pdrop=config.attn_pdrop, 
+        #                     resid_pdrop=config.resid_pdrop,
+        #                     config=config)
+        # self.transformer4 = GPT(n_embd=512,
+        #                     n_head=config.n_head, 
+        #                     block_exp=config.block_exp, 
+        #                     n_layer=config.n_layer, 
+        #                     vert_anchors=config.vert_anchors, 
+        #                     horz_anchors=config.horz_anchors, 
+        #                     seq_len=config.seq_len, 
+        #                     embd_pdrop=config.embd_pdrop, 
+        #                     attn_pdrop=config.attn_pdrop, 
+        #                     resid_pdrop=config.resid_pdrop,
+        #                     config=config)
 
         
     def forward(self, image_list, lidar_list):#, velocity):
  
         if self.image_encoder.normalize:
             image_list = [normalize_imagenet(image_input) for image_input in image_list]
+            image_list = torch.stack(image_list)
+        bz, _, h, w = lidar_list.shape
+        img_channel = image_list.shape[1]
+        lidar_channel = lidar_list.shape[1]
+        self.config.n_views = 1#len(image_list) // self.config.seq_len
 
-        bz, _, h, w = lidar_list[0].shape
-        img_channel = image_list[0].shape[1]
-        lidar_channel = lidar_list[0].shape[1]
-        self.config.n_views = len(image_list) // self.config.seq_len
-
-        image_tensor = torch.stack(image_list, dim=1).view(bz * self.config.n_views * self.config.seq_len, img_channel, h, w)
-        lidar_tensor = torch.stack(lidar_list, dim=1).view(bz * self.config.seq_len, lidar_channel, h, w)
+        image_tensor = image_list #torch.stack(image_list, dim=1).view(bz * self.config.n_views * self.config.seq_len, img_channel, h, w)
+        lidar_tensor = lidar_list #torch.stack(lidar_list, dim=1).view(bz * self.config.seq_len, lidar_channel, h, w)
 
         image_features = self.image_encoder.features.conv1(image_tensor)
         image_features = self.image_encoder.features.bn1(image_features)
@@ -329,34 +329,35 @@ class Encoder(nn.Module):
         image_features = self.image_encoder.features.layer3(image_features)
         lidar_features = self.lidar_encoder._model.layer3(lidar_features)
         # fusion at (B, 256, 16, 16)
-        image_embd_layer3 = self.avgpool(image_features)
-        lidar_embd_layer3 = self.avgpool(lidar_features)
-        image_features_layer3, lidar_features_layer3 = self.transformer3(image_embd_layer3, lidar_embd_layer3)#, velocity)
-        image_features_layer3 = F.interpolate(image_features_layer3, scale_factor=2, mode='bilinear')
-        lidar_features_layer3 = F.interpolate(lidar_features_layer3, scale_factor=2, mode='bilinear')
-        image_features = image_features + image_features_layer3
-        lidar_features = lidar_features + lidar_features_layer3
+        # image_embd_layer3 = self.avgpool(image_features)
+        # lidar_embd_layer3 = self.avgpool(lidar_features)
+        # image_features_layer3, lidar_features_layer3 = self.transformer3(image_embd_layer3, lidar_embd_layer3)#, velocity)
+        # image_features_layer3 = F.interpolate(image_features_layer3, scale_factor=2, mode='bilinear')
+        # lidar_features_layer3 = F.interpolate(lidar_features_layer3, scale_factor=2, mode='bilinear')
+        # image_features = image_features + image_features_layer3
+        # lidar_features = lidar_features + lidar_features_layer3
 
-        image_features = self.image_encoder.features.layer4(image_features)
-        lidar_features = self.lidar_encoder._model.layer4(lidar_features)
-        # fusion at (B, 512, 8, 8)
-        image_embd_layer4 = self.avgpool(image_features)
-        lidar_embd_layer4 = self.avgpool(lidar_features)
-        image_features_layer4, lidar_features_layer4 = self.transformer4(image_embd_layer4, lidar_embd_layer4)#, velocity)
-        image_features = image_features + image_features_layer4
-        lidar_features = lidar_features + lidar_features_layer4
+        # image_features = self.image_encoder.features.layer4(image_features)
+        # lidar_features = self.lidar_encoder._model.layer4(lidar_features)
+        # # fusion at (B, 512, 8, 8)
+        # image_embd_layer4 = self.avgpool(image_features)
+        # lidar_embd_layer4 = self.avgpool(lidar_features)
+        # image_features_layer4, lidar_features_layer4 = self.transformer4(image_embd_layer4, lidar_embd_layer4)#, velocity)
+        # image_features = image_features + image_features_layer4
+        # lidar_features = lidar_features + lidar_features_layer4
 
-        image_features = self.image_encoder.features.avgpool(image_features)
-        image_features = torch.flatten(image_features, 1)
-        image_features = image_features.view(bz, self.config.n_views * self.config.seq_len, -1)
-        lidar_features = self.lidar_encoder._model.avgpool(lidar_features)
-        lidar_features = torch.flatten(lidar_features, 1)
-        lidar_features = lidar_features.view(bz, self.config.seq_len, -1)
+        # image_features = self.image_encoder.features.avgpool(image_features)
+        # image_features = torch.flatten(image_features, 1)
+        # image_features = image_features.view(bz, self.config.n_views * self.config.seq_len, -1)
+        # lidar_features = self.lidar_encoder._model.avgpool(lidar_features)
+        # lidar_features = torch.flatten(lidar_features, 1)
+        # lidar_features = lidar_features.view(bz, self.config.seq_len, -1)
 
-        fused_features = torch.cat([image_features, lidar_features], dim=1)
-        fused_features = torch.sum(fused_features, dim=1)
-
-        return fused_features
+        # fused_features = torch.cat([image_features, lidar_features], dim=1)
+        # fused_features = torch.sum(fused_features, dim=1)
+        #fused_featuremaps = torch.cat([image_features, lidar_features], dim=1)
+        fused_featuremaps = torch.add(image_features,lidar_features)
+        return fused_featuremaps #fused_features
 
 class TransFuser(nn.Module):
     def __init__(self, config, device):

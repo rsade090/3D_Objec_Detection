@@ -68,6 +68,8 @@ class KittiDataset(Dataset):
         bev_map = self.get_BEV(index)
         fov_maps = self.get_FOV(index)
         img_rgb = cv2.resize(img_rgb, dsize=(640,480), interpolation=cv2.INTER_LINEAR)
+        bev_map = torch.from_numpy(bev_map[0])
+        fov_maps = torch.from_numpy(fov_maps[0])
         img_rgb = torch.from_numpy(img_rgb)
         gt_boxes_all = []
         gt_idxs_all = []
@@ -90,20 +92,26 @@ class KittiDataset(Dataset):
             gt_idxs.append(int(cnf.CLASS_NAME_TO_ID[obj[0]]))
         gt_boxes_all = torch.stack(gt_boxes_all)    
         gt_idxs = torch.Tensor(gt_idxs)
-        return img_rgb, gt_boxes_all,gt_idxs #fov_maps, bev_map
+        return img_rgb, bev_map, fov_maps, gt_boxes_all,gt_idxs 
 
     def collate_fn(self, batch):
         images = list()
         boxes = list()
         labels = list()
+        bevs = list()
+        fovs = list()
         for b in batch:
             images.append(b[0])
-            boxes.append(b[1])
-            labels.append(torch.Tensor(b[2]))
+            bevs.append(b[1])
+            fovs.append(b[2])
+            boxes.append(b[3])
+            labels.append(torch.Tensor(b[4]))
         images = torch.stack(images, dim=0)
+        bevs = torch.stack(bevs, dim=0)
+        fovs = torch.stack(fovs, dim=0)
         boxes = pad_sequence(boxes, batch_first=True, padding_value=-1)
         labels = pad_sequence(labels, batch_first=True, padding_value=-1)
-        return images, boxes, labels
+        return images,bevs, fovs, boxes, labels
 
     def get_image(self, idx):
         img_path = os.path.join(self.image_dir, '{:06d}.png'.format(idx))

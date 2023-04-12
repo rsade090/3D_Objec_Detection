@@ -4,22 +4,30 @@ from torchvision import ops
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.nn as nn
-
+from torch.nn.utils.rnn import pad_sequence
 from utils import *
+from models.TransfuserModel import TransFuser
+from config.Transfuse_config import GlobalConfig
 
+Device = 'cuda'
 # -------------------- Models -----------------------
 
 class FeatureExtractor(nn.Module):
     def __init__(self):
         super().__init__()
-        model = torchvision.models.resnet50(pretrained=True)
-        req_layers = list(model.children())[:8]
-        self.backbone = nn.Sequential(*req_layers)
-        for param in self.backbone.named_parameters():
-            param[1].requires_grad = True
-        
+        # model = torchvision.models.resnet50(pretrained=True).to(Device)
+        # req_layers = list(model.children())[:8]
+        # self.backbone = nn.Sequential(*req_layers)
+        # for param in self.backbone.named_parameters():
+        #     param[1].requires_grad = True
+        config = GlobalConfig()
+        model = TransFuser(config, Device)
+        self.backbone = model
+        print(model)
+
     def forward(self, img_data):
-        return self.backbone(img_data)
+        x = self.backbone(img_data)
+        return x
 
 class ProposalModule(nn.Module):
     def __init__(self, in_features, hidden_dim=512, n_anchors=9, p_dropout=0.3):
@@ -101,14 +109,15 @@ class RegionProposalNetwork(nn.Module):
         self.feature_extractor = FeatureExtractor()
         self.proposal_module = ProposalModule(out_channels, n_anchors=self.n_anc_boxes)
         
-    def forward(self, images, gt_bboxes, gt_classes):
+    def forward(self, images, bevs, gt_bboxes, gt_classes):
         batch_size = images.size(dim=0)
-        feature_map = self.feature_extractor(images)
+        input = [images, bevs]
+        feature_map = self.feature_extractor(input).to(Device)
         
         # generate anchors
         anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(self.out_h, self.out_w))
         anc_base = gen_anc_base(anc_pts_x, anc_pts_y, self.anc_scales, self.anc_ratios, (self.out_h, self.out_w))
-        anc_boxes_all = anc_base.repeat(batch_size, 1, 1, 1, 1)
+        anc_boxes_all = anc_base.repeat(batch_size, 1, 1, 1, 1).to(Device)
         gt_classes_all = torch.stack(gt_classes)
         # get positive and negative anchors amongst other things
         gt_bboxes_proj = project_bboxes(gt_bboxes, self.width_scale_factor, self.height_scale_factor, mode='p2a')
@@ -137,7 +146,7 @@ class RegionProposalNetwork(nn.Module):
             anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(self.out_h, self.out_w))
             anc_base = gen_anc_base(anc_pts_x, anc_pts_y, self.anc_scales, self.anc_ratios, (self.out_h, self.out_w))
             anc_boxes_all = anc_base.repeat(batch_size, 1, 1, 1, 1)
-            anc_boxes_flat = anc_boxes_all.reshape(batch_size, -1, 4)
+            anc_boxes_flat = anc_boxes_all.reshape(batch_size, -1, 4).to(Device)
 
             # get conf scores and offsets
             conf_scores_pred, offsets_pred = self.proposal_module(feature_map)
@@ -177,10 +186,11 @@ class ClassificationModule(nn.Module):
         
         # define classification head
         self.cls_head = nn.Linear(hidden_dim, n_classes)
+        #self.cls_headBB = nn.Linear(hidden_dim, 16)
         
-    def forward(self, feature_map, proposals_list, gt_classes=None):
+    def forward(self, feature_map, proposals_list, gt_classes=None, gt_boundingboxes = None, batch_size = 1):
         
-        if gt_classes is None:
+        if (gt_classes is None) or (gt_boundingboxes is None):
             mode = 'eval'
         else:
             mode = 'train'
@@ -198,23 +208,27 @@ class ClassificationModule(nn.Module):
         
         # get the classification scores
         cls_scores = self.cls_head(out)
-        
+        #cls_boundingboxes = self.cls_headBB(out)
         if mode == 'eval':
             return cls_scores
         
         # compute cross entropy loss
+        #gt_reshapeBB = torch.stack(gt_boundingboxes).reshape((-1,16))
         cls_loss = F.cross_entropy(cls_scores, gt_classes.long())
-        
-        return cls_loss
+        # if gt_reshapeBB.size() != cls_boundingboxes.size():
+        #     print("wrongggggggg")
+        cls_boundingboxes = 0 #calc_bbox_reg_loss(gt_reshapeBB, cls_boundingboxes, batch_size)
+        return cls_loss + cls_boundingboxes
+
 class TwoStageDetector(nn.Module):
     def __init__(self, img_size, out_size, out_channels, n_classes, roi_size):
         super().__init__() 
         self.rpn = RegionProposalNetwork(img_size, out_size, out_channels)
         self.classifier = ClassificationModule(out_channels, n_classes, roi_size)
         
-    def forward(self, images, gt_bboxes, gt_classes):
+    def forward(self, images, bevs, gt_bboxes, gt_classes):
         total_rpn_loss, feature_map, proposals, \
-        positive_anc_ind_sep, GT_class_pos = self.rpn(images, gt_bboxes, gt_classes)
+        positive_anc_ind_sep, GT_class_pos = self.rpn(images, bevs, gt_bboxes, gt_classes)
         
         # get separate proposals for each sample
         pos_proposals_list = []
@@ -224,7 +238,7 @@ class TwoStageDetector(nn.Module):
             proposals_sep = proposals[proposal_idxs].detach().clone()
             pos_proposals_list.append(proposals_sep)
         
-        cls_loss = self.classifier(feature_map, pos_proposals_list, GT_class_pos)
+        cls_loss = self.classifier(feature_map, pos_proposals_list, GT_class_pos, gt_bboxes, batch_size)
         total_loss = cls_loss + total_rpn_loss
         
         return total_loss
@@ -246,7 +260,7 @@ class TwoStageDetector(nn.Module):
             n_proposals = len(proposals_final[i]) # get the number of proposals for each image
             classes_final.append(classes_all[c: c+n_proposals])
             c += n_proposals
-            
+           
         return proposals_final, conf_scores_final, classes_final
 
 def gen_anc_centers(out_size):
@@ -291,7 +305,7 @@ def get_iou_mat(batch_size, anc_boxes_all, gt_bboxes_all):
     tot_anc_boxes = anc_boxes_flat.size(dim=1)
     
     # create a placeholder to compute IoUs amongst the boxes
-    ious_mat = torch.zeros((batch_size, tot_anc_boxes, gt_bboxes_all.size(dim=1)))
+    ious_mat = torch.zeros((batch_size, tot_anc_boxes, gt_bboxes_all.size(dim=1))).to(Device)
 
     # compute IoU of the anc boxes with the gt boxes for all the images
     for i in range(batch_size):
@@ -442,7 +456,8 @@ def get_req_anchors(anc_boxes_all, gt_bboxes_all, gt_classes_all, pos_thresh=0.7
     
     # calculate gt offsets
     GT_offsets = calc_gt_offsets(positive_anc_coords, GT_bboxes_pos)
-    
+    if GT_offsets.size() != gt_bboxes_all[0].size():
+        print()
     # get -ve anchors
     
     # condition: select the anchor boxes with max iou less than the threshold
