@@ -137,10 +137,11 @@ class RegionProposalNetwork(nn.Module):
         
         return total_rpn_loss, feature_map, proposals, positive_anc_ind_sep, GT_class_pos
     
-    def inference(self, images, conf_thresh=0.5, nms_thresh=0.7):
+    def inference(self, images, bevs, conf_thresh=0.5, nms_thresh=0.7):
         with torch.no_grad():
             batch_size = images.size(dim=0)
-            feature_map = self.feature_extractor(images)
+            input = [images, bevs]
+            feature_map = self.feature_extractor(input)
 
             # generate anchors
             anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(self.out_h, self.out_w))
@@ -243,9 +244,9 @@ class TwoStageDetector(nn.Module):
         
         return total_loss
     
-    def inference(self, images, conf_thresh=0.9, nms_thresh=0.7):
+    def inference(self, images, bevs, conf_thresh=0.9, nms_thresh=0.7):
         batch_size = images.size(dim=0)
-        proposals_final, conf_scores_final, feature_map = self.rpn.inference(images, conf_thresh, nms_thresh)
+        proposals_final, conf_scores_final, feature_map = self.rpn.inference(images, bevs, conf_thresh, nms_thresh)
         cls_scores = self.classifier(feature_map, proposals_final)
         
         # convert scores into probability

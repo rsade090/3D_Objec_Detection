@@ -67,7 +67,7 @@ class KittiDataset(Dataset):
         labelsM, has_labels, orig_label = self.get_label(sample_id)
         bev_map = self.get_BEV(index)
         fov_maps = self.get_FOV(index)
-        img_rgb = cv2.resize(img_rgb, dsize=(640,480), interpolation=cv2.INTER_LINEAR)
+        img_rgb = cv2.resize(img_rgb, dsize=(256,256), interpolation=cv2.INTER_LINEAR)
         bev_map = torch.from_numpy(bev_map[0])
         fov_maps = torch.from_numpy(fov_maps[0])
         img_rgb = torch.from_numpy(img_rgb)
