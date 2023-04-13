@@ -44,8 +44,8 @@ def lidar_to_top(lidar):
     # qzs=((pzs-TOP_Z_MIN)//TOP_Z_DIVISION).astype(np.int32)
     qzs = (pzs - TOP_Z_MIN) / TOP_Z_DIVISION
     quantized = np.dstack((qxs, qys, qzs, prs)).squeeze()
-    print("quanitixed shape is : ",quantized.shape)
-    print("qxs,qyz,... shape is : ",qxs.shape,qys.shape,qzs.shape,prs.shape)
+    #print("quanitixed shape is : ",quantized.shape)
+    #print("qxs,qyz,... shape is : ",qxs.shape,qys.shape,qzs.shape,prs.shape)
 
     X0, Xn = 0, int((TOP_X_MAX - TOP_X_MIN) // TOP_X_DIVISION) + 1
     Y0, Yn = 0, int((TOP_Y_MAX - TOP_Y_MIN) // TOP_Y_DIVISION) + 1
