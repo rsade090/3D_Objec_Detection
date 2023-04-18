@@ -40,6 +40,7 @@ configs.max_objects = 50
 configs.num_classes = 3
 configs.dataset_dir = "/home/hooshyarin/Documents/KITTI/"
 
+
 train_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
 dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=2, pin_memory=True)
 
@@ -121,10 +122,10 @@ def draw_Cube(img, corners,filename):
     cv2.imwrite(filename+'.jpg',im)
   return      
 
-TrainMode = False
+TrainMode = True
 #detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model49.pt"))
 if TrainMode:
-  epochs = 50
+  epochs = 500
   loss_list = []
   for i in range(epochs):
     total_loss = 0
@@ -144,14 +145,14 @@ if TrainMode:
         count += 1
     writer.add_scalar("Loss/train", total_loss/len(dataloader_train), i)
     #save model
-    torch.save(detector.state_dict(), "/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model"+str(i)+".pt")
+    torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/model"+str(i)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
   print()
 
 # Test and inference the model
 # load the model
-detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/model38.pt"))
 testMode = False
 
 for data in tqdm(dataloader_train):
