@@ -299,6 +299,7 @@ class Encoder(nn.Module):
         image_features = self.image_encoder.features.bn1(image_features)
         image_features = self.image_encoder.features.relu(image_features)
         image_features = self.image_encoder.features.maxpool(image_features)
+
         lidar_features = self.lidar_encoder._model.conv1(lidar_tensor)
         lidar_features = self.lidar_encoder._model.bn1(lidar_features)
         lidar_features = self.lidar_encoder._model.relu(lidar_features)
@@ -310,8 +311,8 @@ class Encoder(nn.Module):
         image_embd_layer1 = self.avgpool(image_features)
         lidar_embd_layer1 = self.avgpool(lidar_features)
         image_features_layer1, lidar_features_layer1 = self.transformer1(image_embd_layer1, lidar_embd_layer1)#, velocity)
-        image_features_layer1 = F.interpolate(image_features_layer1, scale_factor=8, mode='bilinear')
-        lidar_features_layer1 = F.interpolate(lidar_features_layer1, scale_factor=8, mode='bilinear')
+        image_features_layer1 = F.interpolate(image_features_layer1, scale_factor=(6,20), mode='bilinear')
+        lidar_features_layer1 = F.interpolate(lidar_features_layer1, scale_factor=(6,20), mode='bilinear')
         image_features = image_features + image_features_layer1
         lidar_features = lidar_features + lidar_features_layer1
 
@@ -321,8 +322,8 @@ class Encoder(nn.Module):
         image_embd_layer2 = self.avgpool(image_features)
         lidar_embd_layer2 = self.avgpool(lidar_features)
         image_features_layer2, lidar_features_layer2 = self.transformer2(image_embd_layer2, lidar_embd_layer2)#, velocity)
-        image_features_layer2 = F.interpolate(image_features_layer2, scale_factor=4, mode='bilinear')
-        lidar_features_layer2 = F.interpolate(lidar_features_layer2, scale_factor=4, mode='bilinear')
+        image_features_layer2 = F.interpolate(image_features_layer2, scale_factor=(3,10), mode='bilinear')
+        lidar_features_layer2 = F.interpolate(lidar_features_layer2, scale_factor=(3,10), mode='bilinear')
         image_features = image_features + image_features_layer2
         lidar_features = lidar_features + lidar_features_layer2
 
