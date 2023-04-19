@@ -38,11 +38,11 @@ configs = edict()
 configs.hm_size = (152, 152)
 configs.max_objects = 50
 configs.num_classes = 3
-configs.dataset_dir = "/home/hooshyarin/Documents/KITTI/"
+configs.dataset_dir = "/home/sadeghianr/Desktop/Datasets/Kitti/"
 
 
-train_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
-dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=2, pin_memory=True)
+train_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
+dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=48, pin_memory=True)
 
 # create anchor boxes
 anc_scales = [2, 4, 6]
@@ -145,14 +145,14 @@ if TrainMode:
         count += 1
     writer.add_scalar("Loss/train", total_loss/len(dataloader_train), i)
     #save model
-    torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/model"+str(i)+".pt")
+    torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_num48_train_b4/model"+str(i)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
   print()
 
 # Test and inference the model
 # load the model
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/model38.pt"))
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_num48_train_b4/model.pt"))
 testMode = False
 
 for data in tqdm(dataloader_train):
