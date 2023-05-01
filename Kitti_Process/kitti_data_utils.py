@@ -1,309 +1,200 @@
-# from __future__ import print_function
+
+import math
 import os
 import sys
 
-import numpy as np
 import cv2
-
-
+import numpy as np
 import config.kitti_config as cnf
 
+TOP_Y_MIN = -30
+TOP_Y_MAX = +30
+TOP_X_MIN = 0
+TOP_X_MAX = 100
+TOP_Z_MIN = -3.5
+TOP_Z_MAX = 0.6
 
-class Object3d(object):
-    ''' 3d object label '''
+TOP_X_DIVISION = 0.39137 #0.15618 #0.2
+TOP_Y_DIVISION = 0.23359 #0.31308 #0.27813 # # #0.2
+TOP_Z_DIVISION = 0.3
 
-    def __init__(self, label_file_line):
-        data = label_file_line.split(' ')
-        data[1:] = [float(x) for x in data[1:]]
-        # extract label, truncation, occlusion
-        self.type = data[0]  # 'Car', 'Pedestrian', ...
-        self.cls_id = self.cls_type_to_id(self.type)
-        self.truncation = data[1]  # truncated pixel ratio [0..1]
-        self.occlusion = int(data[2])  # 0=visible, 1=partly occluded, 2=fully occluded, 3=unknown
-        self.alpha = data[3]  # object observation angle [-pi..pi]
+def lidar_to_top(lidar):
 
-        # extract 2d bounding box in 0-based coordinates
-        self.xmin = data[4]  # left
-        self.ymin = data[5]  # top
-        self.xmax = data[6]  # right
-        self.ymax = data[7]  # bottom
-        self.box2d = np.array([self.xmin, self.ymin, self.xmax, self.ymax])
+    idx = np.where(lidar[:, 0] > TOP_X_MIN)
+    lidar = lidar[idx]
+    idx = np.where(lidar[:, 0] < TOP_X_MAX)
+    lidar = lidar[idx]
 
-        # extract 3d bounding box information
-        self.h = data[8]  # box height
-        self.w = data[9]  # box width
-        self.l = data[10]  # box length (in meters)
-        self.t = (data[11], data[12], data[13])  # location (x,y,z) in camera coord.
-        self.dis_to_cam = np.linalg.norm(self.t)
-        self.ry = data[14]  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
-        self.score = data[15] if data.__len__() == 16 else -1.0
-        self.level_str = None
-        self.level = self.get_obj_level()
+    idx = np.where(lidar[:, 1] > TOP_Y_MIN)
+    lidar = lidar[idx]
+    idx = np.where(lidar[:, 1] < TOP_Y_MAX)
+    lidar = lidar[idx]
 
-    def cls_type_to_id(self, cls_type):
-        if cls_type not in cnf.CLASS_NAME_TO_ID.keys():
-            return -1
+    idx = np.where(lidar[:, 2] > TOP_Z_MIN)
+    lidar = lidar[idx]
+    idx = np.where(lidar[:, 2] < TOP_Z_MAX)
+    lidar = lidar[idx]
 
-        return cnf.CLASS_NAME_TO_ID[cls_type]
+    pxs = lidar[:, 0]
+    pys = lidar[:, 1]
+    pzs = lidar[:, 2]
+    prs = lidar[:, 3]
+    qxs = ((pxs - TOP_X_MIN) // TOP_X_DIVISION).astype(np.int32)
+    qys = ((pys - TOP_Y_MIN) // TOP_Y_DIVISION).astype(np.int32)
+    # qzs=((pzs-TOP_Z_MIN)//TOP_Z_DIVISION).astype(np.int32)
+    qzs = (pzs - TOP_Z_MIN) / TOP_Z_DIVISION
+    quantized = np.dstack((qxs, qys, qzs, prs)).squeeze()
+    # print("quanitixed shape is : ",quantized.shape)
+    # print("qxs,qyz,... shape is : ",qxs.shape,qys.shape,qzs.shape,prs.shape)
 
-    def get_obj_level(self):
-        height = float(self.box2d[3]) - float(self.box2d[1]) + 1
+    X0, Xn = 0, int((TOP_X_MAX - TOP_X_MIN) // TOP_X_DIVISION) + 1
+    Y0, Yn = 0, int((TOP_Y_MAX - TOP_Y_MIN) // TOP_Y_DIVISION) #+ 1
+    Z0, Zn = 0, int((TOP_Z_MAX - TOP_Z_MIN) / TOP_Z_DIVISION)
+    height = Xn - X0
+    width = Yn - Y0
+    channel = Zn - Z0 + 2
+    # print('height,width,channel=%d,%d,%d'%(height,width,channel))
+    top = np.zeros(shape=(height, width, channel), dtype=np.float32)
 
-        if height >= 40 and self.truncation <= 0.15 and self.occlusion <= 0:
-            self.level_str = 'Easy'
-            return 1  # Easy
-        elif height >= 25 and self.truncation <= 0.3 and self.occlusion <= 1:
-            self.level_str = 'Moderate'
-            return 2  # Moderate
-        elif height >= 25 and self.truncation <= 0.5 and self.occlusion <= 2:
-            self.level_str = 'Hard'
-            return 3  # Hard
-        else:
-            self.level_str = 'UnKnown'
-            return 4
+    if 1:  # new method
+        for x in range(Xn):
+            ix = np.where(quantized[:, 0] == x)
+            quantized_x = quantized[ix]
+            if len(quantized_x) == 0:
+                continue
+            yy = -x
 
-    def print_object(self):
-        print('Type, truncation, occlusion, alpha: %s, %d, %d, %f' % \
-              (self.type, self.truncation, self.occlusion, self.alpha))
-        print('2d bbox (x0,y0,x1,y1): %f, %f, %f, %f' % \
-              (self.xmin, self.ymin, self.xmax, self.ymax))
-        print('3d bbox h,w,l: %f, %f, %f' % \
-              (self.h, self.w, self.l))
-        print('3d bbox location, ry: (%f, %f, %f), %f' % \
-              (self.t[0], self.t[1], self.t[2], self.ry))
+            for y in range(Yn):
+                iy = np.where(quantized_x[:, 1] == y)
+                quantized_xy = quantized_x[iy]
+                count = len(quantized_xy)
+                if count == 0:
+                    continue
+                xx = -y
 
-    def to_kitti_format(self):
-        kitti_str = '%s %.2f %d %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' \
-                    % (self.type, self.truncation, int(self.occlusion), self.alpha, self.box2d[0], self.box2d[1],
-                       self.box2d[2], self.box2d[3], self.h, self.w, self.l, self.t[0], self.t[1], self.t[2],
-                       self.ry, self.score)
-        return kitti_str
+                top[yy, xx, Zn + 1] = min(1, np.log(count + 1) / math.log(32))
+                max_height_point = np.argmax(quantized_xy[:, 2])
+                top[yy, xx, Zn] = quantized_xy[max_height_point, 3]
 
-
-def read_label(label_filename):
-    lines = [line.rstrip() for line in open(label_filename)]
-    objects = [Object3d(line) for line in lines]
-    return objects
-
-
-class Calibration(object):
-    ''' Calibration matrices and utils
-        3d XYZ in <label>.txt are in rect camera coord.
-        2d box xy are in image2 coord
-        Points in <lidar>.bin are in Velodyne coord.
-
-        y_image2 = P^2_rect * x_rect
-        y_image2 = P^2_rect * R0_rect * Tr_velo_to_cam * x_velo
-        x_ref = Tr_velo_to_cam * x_velo
-        x_rect = R0_rect * x_ref
-
-        P^2_rect = [f^2_u,  0,      c^2_u,  -f^2_u b^2_x;
-                    0,      f^2_v,  c^2_v,  -f^2_v b^2_y;
-                    0,      0,      1,      0]
-                 = K * [1|t]
-
-        image2 coord:
-         ----> x-axis (u)
-        |
-        |
-        v y-axis (v)
-
-        velodyne coord:
-        front x, left y, up z
-
-        rect/ref camera coord:
-        right x, down y, front z
-
-        Ref (KITTI paper): http://www.cvlibs.net/publications/Geiger2013IJRR.pdf
-
-        TODO(rqi): do matrix multiplication only once for each projection.
-    '''
-
-    def __init__(self, calib_filepath):
-        calibs = self.read_calib_file(calib_filepath)
-        # Projection matrix from rect camera coord to image2 coord
-        self.P2 = calibs['P2']
-        self.P2 = np.reshape(self.P2, [3, 4])
-        self.P3 = calibs['P3']
-        self.P3 = np.reshape(self.P3, [3, 4])
-        # Rigid transform from Velodyne coord to reference camera coord
-        self.V2C = calibs['Tr_velo2cam']
-        self.V2C = np.reshape(self.V2C, [3, 4])
-        # Rotation from reference camera coord to rect camera coord
-        self.R0 = calibs['R_rect']
-        self.R0 = np.reshape(self.R0, [3, 3])
-
-        # Camera intrinsics and extrinsics
-        self.c_u = self.P2[0, 2]
-        self.c_v = self.P2[1, 2]
-        self.f_u = self.P2[0, 0]
-        self.f_v = self.P2[1, 1]
-        self.b_x = self.P2[0, 3] / (-self.f_u)  # relative
-        self.b_y = self.P2[1, 3] / (-self.f_v)
-
-    def read_calib_file(self, filepath):
-        with open(filepath) as f:
-            lines = f.readlines()
-
-        obj = lines[2].strip().split(' ')[1:]
-        P2 = np.array(obj, dtype=np.float32)
-        obj = lines[3].strip().split(' ')[1:]
-        P3 = np.array(obj, dtype=np.float32)
-        obj = lines[4].strip().split(' ')[1:]
-        R0 = np.array(obj, dtype=np.float32)
-        obj = lines[5].strip().split(' ')[1:]
-        Tr_velo_to_cam = np.array(obj, dtype=np.float32)
-
-        return {'P2': P2.reshape(3, 4),
-                'P3': P3.reshape(3, 4),
-                'R_rect': R0.reshape(3, 3),
-                'Tr_velo2cam': Tr_velo_to_cam.reshape(3, 4)}
-
-    def cart2hom(self, pts_3d):
-        """
-        :param pts: (N, 3 or 2)
-        :return pts_hom: (N, 4 or 3)
-        """
-        pts_hom = np.hstack((pts_3d, np.ones((pts_3d.shape[0], 1), dtype=np.float32)))
-        return pts_hom
+                for z in range(Zn):
+                    iz = np.where(
+                        (quantized_xy[:, 2] >= z) & (quantized_xy[:, 2] <= z + 1)
+                    )
+                    quantized_xyz = quantized_xy[iz]
+                    if len(quantized_xyz) == 0:
+                        continue
+                    zz = z
+                    # height per slice
+                    max_height = max(0, np.max(quantized_xyz[:, 2]) - z)
+                    top[yy, xx, zz] = max_height
+    return top 
 
 
-def compute_radius(det_size, min_overlap=0.7):
-    height, width = det_size
+def lidar_to_top_coords(x, y):
+    # print("TOP_X_MAX-TOP_X_MIN:",TOP_X_MAX,TOP_X_MIN)
+    Xn = int((TOP_X_MAX - TOP_X_MIN) // TOP_X_DIVISION) + 1
+    Yn = int((TOP_Y_MAX - TOP_Y_MIN) // TOP_Y_DIVISION) + 1
+    xx = Yn - int((y - TOP_Y_MIN) // TOP_Y_DIVISION)
+    yy = Xn - int((x - TOP_X_MIN) // TOP_X_DIVISION)
 
-    a1 = 1
-    b1 = (height + width)
-    c1 = width * height * (1 - min_overlap) / (1 + min_overlap)
-    sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
-    r1 = (b1 + sq1) / 2
-
-    a2 = 4
-    b2 = 2 * (height + width)
-    c2 = (1 - min_overlap) * width * height
-    sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
-    r2 = (b2 + sq2) / 2
-
-    a3 = 4 * min_overlap
-    b3 = -2 * min_overlap * (height + width)
-    c3 = (min_overlap - 1) * width * height
-    sq3 = np.sqrt(b3 ** 2 - 4 * a3 * c3)
-    r3 = (b3 + sq3) / 2
-
-    return min(r1, r2, r3)
-
-
-def gaussian2D(shape, sigma=1):
-    m, n = [(ss - 1.) / 2. for ss in shape]
-    y, x = np.ogrid[-m:m + 1, -n:n + 1]
-    h = np.exp(-(x * x + y * y) / (2 * sigma * sigma))
-    h[h < np.finfo(h.dtype).eps * h.max()] = 0
-
-    return h
-
-
-def gen_hm_radius(heatmap, center, radius, k=1):
-    diameter = 2 * radius + 1
-    gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
-
-    x, y = int(center[0]), int(center[1])
-
-    height, width = heatmap.shape[0:2]
-
-    left, right = min(x, radius), min(width - x, radius + 1)
-    top, bottom = min(y, radius), min(height - y, radius + 1)
-
-    masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
-    masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
-    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:  # TODO debug
-        np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
-
-    return heatmap
+    return xx, yy
+def draw_box3d_on_top(image, boxes3d, color=(255, 255, 255), thickness=1, scores=None, text_lables=[], is_gt=False,):
+    # if scores is not None and scores.shape[0] >0:
+    # print(scores.shape)
+    # scores=scores[:,0]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    img = image.copy()
+    num = len(boxes3d)
+    startx = 5
+    for n in range(num):
+        b = boxes3d[n]
+        x0 = b[0, 0]
+        y0 = b[0, 1]
+        x1 = b[1, 0]
+        y1 = b[1, 1]
+        x2 = b[2, 0]
+        y2 = b[2, 1]
+        x3 = b[3, 0]
+        y3 = b[3, 1]
+        u0, v0 = lidar_to_top_coords(x0, y0)
+        u1, v1 = lidar_to_top_coords(x1, y1)
+        u2, v2 = lidar_to_top_coords(x2, y2)
+        u3, v3 = lidar_to_top_coords(x3, y3)
+        color = (0, 255, 0)
+        startx = 5
+        cv2.line(img, (u0, v0), (u1, v1), color, thickness, cv2.LINE_AA)
+        cv2.line(img, (u1, v1), (u2, v2), color, thickness, cv2.LINE_AA)
+        cv2.line(img, (u2, v2), (u3, v3), color, thickness, cv2.LINE_AA)
+        cv2.line(img, (u3, v3), (u0, v0), color, thickness, cv2.LINE_AA)
+    for n in range(len(text_lables)):
+        text_pos = (startx, 25 * (n + 1))
+        cv2.putText(img, text_lables[n], text_pos, font, 0.5, color, 0, cv2.LINE_AA)
+    return img
 
 
-def get_filtered_lidar(lidar, boundary, labels=None):
-    minX = boundary['minX']
-    maxX = boundary['maxX']
-    minY = boundary['minY']
-    maxY = boundary['maxY']
-    minZ = boundary['minZ']
-    maxZ = boundary['maxZ']
+def makeBEVMap(PointCloud_, boundary):
+    Height = cnf.BEV_HEIGHT + 1
+    Width = cnf.BEV_WIDTH + 1
 
-    # Remove the point out of range x,y,z
-    mask = np.where((lidar[:, 0] >= minX) & (lidar[:, 0] <= maxX) &
-                    (lidar[:, 1] >= minY) & (lidar[:, 1] <= maxY) &
-                    (lidar[:, 2] >= minZ) & (lidar[:, 2] <= maxZ))
-    lidar = lidar[mask]
-    lidar[:, 2] = lidar[:, 2] - minZ
+    # Discretize Feature Map
+    PointCloud = np.copy(PointCloud_)
+    PointCloud[:, 0] = np.int_(np.floor(PointCloud[:, 0] / cnf.DISCRETIZATION))
+    PointCloud[:, 1] = np.int_(np.floor(PointCloud[:, 1] / cnf.DISCRETIZATION) + Width / 2)
 
-    if labels is not None:
-        label_x = (labels[:, 1] >= minX) & (labels[:, 1] < maxX)
-        label_y = (labels[:, 2] >= minY) & (labels[:, 2] < maxY)
-        label_z = (labels[:, 3] >= minZ) & (labels[:, 3] < maxZ)
-        mask_label = label_x & label_y & label_z
-        labels = labels[mask_label]
-        return lidar, labels
-    else:
-        return lidar
+    # sort-3times
+    sorted_indices = np.lexsort((-PointCloud[:, 2], PointCloud[:, 1], PointCloud[:, 0]))
+    PointCloud = PointCloud[sorted_indices]
+    _, unique_indices, unique_counts = np.unique(PointCloud[:, 0:2], axis=0, return_index=True, return_counts=True)
+    PointCloud_top = PointCloud[unique_indices]
 
+    # Height Map, Intensity Map & Density Map
+    heightMap = np.zeros((Height, Width))
+    intensityMap = np.zeros((Height, Width))
+    densityMap = np.zeros((Height, Width))
 
-def box3d_corners_to_center(box3d_corner):
-    # (N, 8, 3) -> (N, 7)
-    assert box3d_corner.ndim == 3
+    # some important problem is image coordinate is (y,x), not (x,y)
+    max_height = float(np.abs(boundary['maxZ'] - boundary['minZ']))
+    heightMap[np.int_(PointCloud_top[:, 0]), np.int_(PointCloud_top[:, 1])] = PointCloud_top[:, 2] / max_height
 
-    xyz = np.mean(box3d_corner, axis=1)
+    normalizedCounts = np.minimum(1.0, np.log(unique_counts + 1) / np.log(64))
+    intensityMap[np.int_(PointCloud_top[:, 0]), np.int_(PointCloud_top[:, 1])] = PointCloud_top[:, 3]
+    densityMap[np.int_(PointCloud_top[:, 0]), np.int_(PointCloud_top[:, 1])] = normalizedCounts
 
-    h = abs(np.mean(box3d_corner[:, 4:, 2] - box3d_corner[:, :4, 2], axis=1, keepdims=True))
-    w = (np.sqrt(np.sum((box3d_corner[:, 0, [0, 1]] - box3d_corner[:, 1, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-         np.sqrt(np.sum((box3d_corner[:, 2, [0, 1]] - box3d_corner[:, 3, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-         np.sqrt(np.sum((box3d_corner[:, 4, [0, 1]] - box3d_corner[:, 5, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-         np.sqrt(np.sum((box3d_corner[:, 6, [0, 1]] - box3d_corner[:, 7, [0, 1]]) ** 2, axis=1, keepdims=True))) / 4
+    RGB_Map = np.zeros((3, Height - 1, Width - 1))
+    RGB_Map[2, :, :] = densityMap[:cnf.BEV_HEIGHT, :cnf.BEV_WIDTH]  # r_map
+    RGB_Map[1, :, :] = heightMap[:cnf.BEV_HEIGHT, :cnf.BEV_WIDTH]  # g_map
+    RGB_Map[0, :, :] = intensityMap[:cnf.BEV_HEIGHT, :cnf.BEV_WIDTH]  # b_map
 
-    l = (np.sqrt(np.sum((box3d_corner[:, 0, [0, 1]] - box3d_corner[:, 3, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-         np.sqrt(np.sum((box3d_corner[:, 1, [0, 1]] - box3d_corner[:, 2, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-         np.sqrt(np.sum((box3d_corner[:, 4, [0, 1]] - box3d_corner[:, 7, [0, 1]]) ** 2, axis=1, keepdims=True)) +
-         np.sqrt(np.sum((box3d_corner[:, 5, [0, 1]] - box3d_corner[:, 6, [0, 1]]) ** 2, axis=1, keepdims=True))) / 4
-
-    yaw = (np.arctan2(box3d_corner[:, 2, 1] - box3d_corner[:, 1, 1],
-                      box3d_corner[:, 2, 0] - box3d_corner[:, 1, 0]) +
-           np.arctan2(box3d_corner[:, 3, 1] - box3d_corner[:, 0, 1],
-                      box3d_corner[:, 3, 0] - box3d_corner[:, 0, 0]) +
-           np.arctan2(box3d_corner[:, 2, 0] - box3d_corner[:, 3, 0],
-                      box3d_corner[:, 3, 1] - box3d_corner[:, 2, 1]) +
-           np.arctan2(box3d_corner[:, 1, 0] - box3d_corner[:, 0, 0],
-                      box3d_corner[:, 0, 1] - box3d_corner[:, 1, 1]))[:, np.newaxis] / 4
-
-    return np.concatenate([h, w, l, xyz, yaw], axis=1).reshape(-1, 7)
+    return RGB_Map
 
 
-def box3d_center_to_conners(box3d_center):
-    h, w, l, x, y, z, yaw = box3d_center
-    Box = np.array([[-l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2],
-                    [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2],
-                    [0, 0, 0, 0, h, h, h, h]])
+# bev image coordinates format
+def get_corners(x, y, w, l, yaw):
+    bev_corners = np.zeros((4, 2), dtype=np.float32)
+    cos_yaw = np.cos(yaw)
+    sin_yaw = np.sin(yaw)
+    # front left
+    bev_corners[0, 0] = x - w / 2 * cos_yaw - l / 2 * sin_yaw
+    bev_corners[0, 1] = y - w / 2 * sin_yaw + l / 2 * cos_yaw
 
-    rotMat = np.array([
-        [np.cos(yaw), -np.sin(yaw), 0.0],
-        [np.sin(yaw), np.cos(yaw), 0.0],
-        [0.0, 0.0, 1.0]])
+    # rear left
+    bev_corners[1, 0] = x - w / 2 * cos_yaw + l / 2 * sin_yaw
+    bev_corners[1, 1] = y - w / 2 * sin_yaw - l / 2 * cos_yaw
 
-    velo_box = np.dot(rotMat, Box)
-    cornerPosInVelo = velo_box + np.tile(np.array([x, y, z]), (8, 1)).T
-    box3d_corner = cornerPosInVelo.transpose()
+    # rear right
+    bev_corners[2, 0] = x + w / 2 * cos_yaw + l / 2 * sin_yaw
+    bev_corners[2, 1] = y + w / 2 * sin_yaw - l / 2 * cos_yaw
 
-    return box3d_corner.astype(np.float32)
+    # front right
+    bev_corners[3, 0] = x + w / 2 * cos_yaw - l / 2 * sin_yaw
+    bev_corners[3, 1] = y + w / 2 * sin_yaw + l / 2 * cos_yaw
+
+    return bev_corners
 
 
-if __name__ == '__main__':
-    heatmap = np.zeros((96, 320))
-
-    h, w = 40, 50
-    radius = compute_radius((h, w))
-    radius = max(0, int(radius))
-    print('h: {}, w: {}, radius: {}, sigma: {}'.format(h, w, radius, (2 * radius + 1) / 6.))
-    gen_hm_radius(heatmap, center=(200, 50), radius=radius)
-    while True:
-        cv2.imshow('heatmap', heatmap)
-        if cv2.waitKey(0) & 0xff == 27:
-            break
-    max_pos = np.unravel_index(heatmap.argmax(), shape=heatmap.shape)
-    print('max_pos: {}'.format(max_pos))
+def drawRotatedBox(img, x, y, w, l, yaw, color):
+    bev_corners = get_corners(x, y, w, l, yaw)
+    corners_int = bev_corners.reshape(-1, 1, 2).astype(int)
+    cv2.polylines(img, [corners_int], True, color, 2)
+    corners_int = bev_corners.reshape(-1, 2).astype(int)
+    cv2.line(img, (corners_int[0, 0], corners_int[0, 1]), (corners_int[3, 0], corners_int[3, 1]), (255, 255, 0), 2)
