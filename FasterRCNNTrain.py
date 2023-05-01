@@ -23,6 +23,9 @@ parser = argparse.ArgumentParser()
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch.nn.utils.rnn import pad_sequence
+from Kitti_Process.kitti_bev_utils import draw_box3d_on_top
+from dataAugmentation import DataAugmentation
+
 writer = SummaryWriter()
 
 parser.add_argument('--id', type=str, default='transfuser', help='Unique experiment identifier.')
@@ -39,25 +42,25 @@ configs.hm_size = (152, 152)
 configs.max_objects = 50
 configs.num_classes = 3
 configs.dataset_dir = "/home/sadeghianr/Desktop/Datasets/Kitti/"
-
-
+configs.imageSize =  (256,256) # (375,1242)(192, 640)
 train_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
-dataloader_train = DataLoader(train_set, batch_size=16, shuffle=True,collate_fn=train_set.collate_fn,num_workers=16,  pin_memory=True) #,
+test_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
+print('number of train samples: ', len(train_set))
+print('number of test samples: ', len(train_set))
 
-test_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
-dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=train_set.collate_fn, pin_memory=True)
+dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=16, pin_memory=True)
+dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=train_set.collate_fn, num_workers=16, pin_memory=True)
 
 # create anchor boxes
 anc_scales = [2, 4, 6]
 anc_ratios = [0.5, 1, 1.5]
 n_anc_boxes = len(anc_scales) * len(anc_ratios) # number of anchor boxes for each anchor point
-out_c, out_h, out_w = 256, 16, 16 #2048, 15, 20
+out_c, out_h, out_w = 256, 16, 16 #256, 12, 40 #2048, 15, 20
 anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(out_h, out_w))
 anc_base = gen_anc_base(anc_pts_x, anc_pts_y, anc_scales, anc_ratios, (out_h, out_w))
 
-img_size = (256, 256)
-width_scale_factor = img_size[1] // out_w
-height_scale_factor = img_size[0] // out_h
+width_scale_factor = configs.imageSize[1] // out_w
+height_scale_factor = configs.imageSize[0] // out_h
 out_size = (out_h, out_w)
 name2idx = kittiCnf.CLASS_NAME_TO_ID
 idx2name = {v:k for k, v in name2idx.items()}
@@ -65,45 +68,19 @@ n_classes = len(name2idx) #-1 # exclude pad idx
 roi_size = (2, 2)
 
 
-detector = TwoStageDetector(img_size, out_size, out_c, n_classes, roi_size)
+detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size)
 detector.to(args.device)
 optimizer = optim.Adam(detector.parameters(), lr=0.0001)
 transform = transforms.Compose([
-  transforms.Resize((256,256)),                         
-  #transforms.Resize((480,640)),                         
+  #transforms.Resize((216,640)),                         
+  #transforms.Resize((480,640)),
+  transforms.RandomCrop(256)                         
 ])
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 param_count = count_parameters(detector)
 # number of trainable parameters -> 35848757
-def display_img(img_data, fig, axes):
-    for i, img in enumerate(img_data):
-        if type(img) == torch.Tensor:
-          img = img.permute(1, 2, 0)
-        axes[i].imshow(img)
-    
-    return fig, axes
 
-def display_bbox(bboxes, fig, ax, classes=None, in_format='xyxy', color='y', line_width=3):
-    if type(bboxes) == np.ndarray:
-        bboxes = torch.from_numpy(bboxes)
-    if classes:
-        assert len(bboxes) == len(classes)
-    # convert boxes to xywh format
-    bboxes = ops.box_convert(bboxes, in_fmt=in_format, out_fmt='xywh')
-    c = 0
-    for box in bboxes:
-        x, y, w, h = box.numpy()
-        # display bounding box
-        rect = patches.Rectangle((x, y), w, h, linewidth=line_width, edgecolor=color, facecolor='none')
-        ax.add_patch(rect)
-        # display category
-        if classes:
-            if classes[c] == 'pad':
-                continue
-            ax.text(x + 5, y + 20, classes[c], bbox=dict(facecolor='yellow', alpha=0.5))
-        c += 1  
-    return fig, ax
 
 BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3]]
 def draw_rect(img, corners, filename):
@@ -114,6 +91,10 @@ def draw_rect(img, corners, filename):
     maxx = max(corners[0][i][:,0]).numpy()
     maxy = max(corners[0][i][:,1]).numpy()
     img3 = cv2.rectangle(img[0].cpu().numpy(), (int(minx), int(miny)), (int(maxx), int(maxy)), (255,0,0),1)
+    imt = img[0]
+    imt = imt[int(miny): int(maxy), int(minx): int(maxx)]
+    print()
+    #cv2.putText(img3, classes_pred_1[i], (int(minx), int(miny)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (36,255,12), 1)
   cv2.imwrite(filename+'.jpg', img3)       
   return
 
@@ -126,18 +107,23 @@ def draw_Cube(img, corners,filename):
       cv2.imwrite(filename+'.jpg',im)
   return      
 
-TrainMode = False
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_train_b16_5cls/model240.pt"))
+dataAug = DataAugmentation()
+
+TrainMode = True
+#detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model.pt"))
 if TrainMode:
   epochs = 800
   loss_list = []
   for i in range(epochs):
     total_loss = 0
     count = 0
+    sample = 0
     for data in tqdm(dataloader_train):        
         img, bev, fov, targetBox, targetLabel = data
-        imgs =  ((torch.permute(img, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
-        bevs = ((torch.permute(bev, (0,3, 1, 2)))).to(args.device, dtype=torch.float32) #transform(
+        img, bev, fov, targetBox, targetLabel = dataAug.randPosCrop(img,targetBox,targetLabel, bev, fov)
+        sample += img.shape[0]
+        imgs =  torch.permute(img, (0,3, 1, 2)).to(args.device, dtype=torch.float32)
+        bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)
         targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
         targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
         detector.train()
@@ -150,14 +136,14 @@ if TrainMode:
     writer.add_scalar("Loss/train", total_loss/len(dataloader_train), i)
     #save model
     if i % 10==0:
-      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_train_b16_5cls/model"+str(i+140)+".pt")
+      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justCroppedimage/model"+str(i)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
   print()
 
 # Test and inference the model
 # load the model
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_train_b16_5cls/model750.pt"))
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justCroppedimage/model750.pt"))
 testMode = True
 count = 0
 for data in tqdm(dataloader_test):
@@ -166,9 +152,9 @@ for data in tqdm(dataloader_test):
   
   if count < 50 :
     im = img.clone()
-    draw_rect(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/imageResults_5cls/beforeRect"+str(count))
+    draw_rect(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justCroppedimage/beforeRect"+str(count))
     im = img.clone()
-    draw_Cube(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/imageResults_5cls/beforeCube"+str(count))
+    draw_Cube(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justCroppedimage/beforeCube"+str(count))
   else:
      print()
   imgs = (transform(torch.permute(img, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
@@ -176,25 +162,28 @@ for data in tqdm(dataloader_test):
   targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
   targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
   detector.eval()
-  proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevs, conf_thresh=0.99, nms_thresh=0.05) 
+  proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevs, conf_thresh=0.99, nms_thresh=0.01) 
   # project proposals to the image space
   proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
   prop_proj_1 = project_bboxes(proposals_final, width_scale_factor, height_scale_factor, mode='a2p')
-  
-  #get classes
   classes_pred_1 = [idx2name[cls] for cls in classes_final[0].tolist()]
   # prop_proj_1[0][0][0] = int(float(prop_proj_1[0][0][0])) / (img[0].shape[1]/ 1242)
   # prop_proj_1[0][0][1] = int(float(prop_proj_1[0][0][1])) / (img[0].shape[1]/ 1242)
   # prop_proj_1[0][0][2] = int(float(prop_proj_1[0][0][2])) / (img[0].shape[0]/ 375)
   # prop_proj_1[0][0][3] = int(float(prop_proj_1[0][0][3])) / (img[0].shape[0]/ 375)
   #imm = img[0]
-  #bboxes = ops.box_convert(prop_proj_1[0], in_fmt='xywh', out_fmt='xyxy')
+  # bboxes = ops.box_convert(prop_proj_1[0], in_fmt='xyxy', out_fmt='xywh')
+  # prop_proj_1[0][0][0] = bboxes[0][0]
+  # prop_proj_1[0][0][1] = bboxes[0][1]
+  # prop_proj_1[0][0][2] = bboxes[0][0] + bboxes[0][2]
+  # prop_proj_1[0][0][3] = bboxes[0][1] + bboxes[0][3]
   #img3 = cv2.rectangle(img[0].cpu().numpy(), (int(bboxes[0][0]), int(bboxes[0][1])), (int(bboxes[0][2]), int(bboxes[0][3])), (255,0,0),1)
+  img4 = (img[0].clone()).cpu().numpy()
   for i in range(prop_proj_1[0].shape[0]):
     img4 = cv2.rectangle(img[0].cpu().numpy(), (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])), (int(prop_proj_1[0][i][2]), int(prop_proj_1[0][i][3])), (0,255,0),1)
     cv2.putText(img4, classes_pred_1[i], (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (36,255,12), 1)
     if count < 50 :
-      cv2.imwrite("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/imageResults_5cls/result"+str(count)+".jpg", img4)  
+      cv2.imwrite("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justCroppedimage/result"+str(count)+".jpg", img4)  
   count+=1
 
   # nrows, ncols = (2, 2)

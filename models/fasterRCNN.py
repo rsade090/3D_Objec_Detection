@@ -112,6 +112,7 @@ class RegionProposalNetwork(nn.Module):
     def forward(self, images, bevs, gt_bboxes, gt_classes):
         batch_size = images.size(dim=0)
         input = [images, bevs]
+        #input = images
         feature_map = self.feature_extractor(input).to(Device)
         
         # generate anchors
@@ -141,6 +142,7 @@ class RegionProposalNetwork(nn.Module):
         with torch.no_grad():
             batch_size = images.size(dim=0)
             input = [images, bevs]
+            #input = images
             feature_map = self.feature_extractor(input)
 
             # generate anchors
@@ -246,6 +248,7 @@ class TwoStageDetector(nn.Module):
     
     def inference(self, images, bevs, conf_thresh=0.9, nms_thresh=0.7):
         batch_size = images.size(dim=0)
+        im = images[0]
         proposals_final, conf_scores_final, feature_map = self.rpn.inference(images, bevs, conf_thresh, nms_thresh)
         cls_scores = self.classifier(feature_map, proposals_final)
         

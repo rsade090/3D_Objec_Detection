@@ -16,18 +16,25 @@ from config import kitti_config as cnf
 #from Kitti_Process.kittiUtils import compute_box_3d, project_to_image
 from utils.visualization_utils import compute_box_3d, project_to_image
 from torch.nn.utils.rnn import pad_sequence
+from torchvision import transforms
+
 BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3], [1, 6], [2, 5]]
 IMG_WIDTH, IMG_HEIGHT = 1242, 375
+
+
 
 class KittiDataset(Dataset):
     def __init__(self, configs, mode='train', lidar_aug=None, hflip_prob=None):
         self.dataset_dir = configs.dataset_dir
         self.hm_size = configs.hm_size
+        self.imageSize = configs.imageSize
         self.num_classes = configs.num_classes
         self.max_objects = configs.max_objects
         assert mode in ['train', 'val', 'test'], 'Invalid mode: {}'.format(mode)
         self.mode = mode
         self.is_test = (self.mode == 'test')
+        if self.mode == 'test':
+            sub_folder = 'testing'
         sub_folder = 'training'
         self.lidar_aug = lidar_aug
         self.hflip_prob = hflip_prob
@@ -43,17 +50,20 @@ class KittiDataset(Dataset):
         return len(self.sample_id_list)
 
     def __getitem__(self, index):
-        return self.load_img_with_targets(index)
+        if self.mode == 'test':
+            return self.load_img_only(index)
+        else:        
+            return self.load_img_with_targets(index)
 
     def load_img_only(self, index):
         """Load only image for the testing phase"""
-        sample_id = int(self.sample_id_list[index])
-        img_path, img_rgb = self.get_image(sample_id)
-        lidarData = self.get_lidar(sample_id)
-        lidarData = get_filtered_lidar(lidarData, cnf.boundary)
-        bev_map = makeBEVMap(lidarData, cnf.boundary)
-        bev_map = torch.from_numpy(bev_map)
-        return bev_map, img_rgb
+        bev_map = self.get_BEV(index)
+        fov_maps = self.get_FOV(index)
+        img_rgb = cv2.resize(img_rgb, dsize=(self.imageSize[1],self.imageSize[0]), interpolation=cv2.INTER_LINEAR)
+        bev_map = torch.from_numpy(bev_map[0])
+        fov_maps = torch.from_numpy(fov_maps[0])
+        img_rgb = torch.from_numpy(img_rgb)
+        return bev_map, img_rgb, fov_maps
 
     def load_img_with_targets(self, index):
         sample_id = int(self.sample_id_list[index])
@@ -65,8 +75,8 @@ class KittiDataset(Dataset):
         labelsM, has_labels, orig_label = self.get_label(sample_id)
         bev_map = self.get_BEV(index)
         fov_maps = self.get_FOV(index)
-        img_rgb = cv2.resize(img_rgb, dsize=(256,256), interpolation=cv2.INTER_LINEAR)
-        bev_map = torch.from_numpy(bev_map[0])
+        img_rgb = cv2.resize(img_rgb, dsize=(self.imageSize[1],self.imageSize[0]), interpolation=cv2.INTER_LINEAR)
+        bev_map = torch.from_numpy(bev_map[0]) #torch.Tensor([torch.from_numpy(bevs) for bevs in bev_map])
         fov_maps = torch.from_numpy(fov_maps[0])
         img_rgb = torch.from_numpy(img_rgb)
         gt_boxes_all = []
@@ -104,13 +114,15 @@ class KittiDataset(Dataset):
             images.append(b[0])
             bevs.append(b[1])
             fovs.append(b[2])
-            boxes.append(b[3])
-            labels.append(torch.Tensor(b[4]))
+            if self.mode != 'test':
+                boxes.append(b[3])
+                labels.append(torch.Tensor(b[4]))
         images = torch.stack(images, dim=0)
         bevs = torch.stack(bevs, dim=0)
         fovs = torch.stack(fovs, dim=0)
-        boxes = pad_sequence(boxes, batch_first=True, padding_value=-1)
-        labels = pad_sequence(labels, batch_first=True, padding_value=-1)
+        if self.mode != 'test':
+            boxes = pad_sequence(boxes, batch_first=True, padding_value=-1)
+            labels = pad_sequence(labels, batch_first=True, padding_value=-1)
         return images,bevs, fovs, boxes, labels
 
     def get_image(self, idx):
@@ -224,70 +236,6 @@ class KittiDataset(Dataset):
             labels = np.array(labels, dtype=np.float32)
             has_labels = True
         return labels, has_labels, orig_labels
-
-    def build_targets(self, labels, hflipped):
-        minX = cnf.boundary['minX']
-        maxX = cnf.boundary['maxX']
-        minY = cnf.boundary['minY']
-        maxY = cnf.boundary['maxY']
-        minZ = cnf.boundary['minZ']
-        maxZ = cnf.boundary['maxZ']
-        num_objects = min(len(labels), self.max_objects)
-        hm_l, hm_w = self.hm_size
-        hm_main_center = np.zeros((self.num_classes, hm_l, hm_w), dtype=np.float32)
-        cen_offset = np.zeros((self.max_objects, 2), dtype=np.float32)
-        direction = np.zeros((self.max_objects, 2), dtype=np.float32)
-        z_coor = np.zeros((self.max_objects, 1), dtype=np.float32)
-        dimension = np.zeros((self.max_objects, 3), dtype=np.float32)
-        indices_center = np.zeros((self.max_objects), dtype=np.int64)
-        obj_mask = np.zeros((self.max_objects), dtype=np.uint8)
-        for k in range(num_objects):
-            cls_id, x, y, z, h, w, l, yaw = labels[k]
-            cls_id = int(cls_id)
-            # Invert yaw angle
-            yaw = -yaw
-            if not ((minX <= x <= maxX) and (minY <= y <= maxY) and (minZ <= z <= maxZ)):
-                continue
-            if (h <= 0) or (w <= 0) or (l <= 0):
-                continue
-            bbox_l = l / cnf.bound_size_x * hm_l
-            bbox_w = w / cnf.bound_size_y * hm_w
-            radius = compute_radius((math.ceil(bbox_l), math.ceil(bbox_w)))
-            radius = max(0, int(radius))
-            center_y = (x - minX) / cnf.bound_size_x * hm_l  # x --> y (invert to 2D image space)
-            center_x = (y - minY) / cnf.bound_size_y * hm_w  # y --> x
-            center = np.array([center_x, center_y], dtype=np.float32)
-            if hflipped:
-                center[0] = hm_w - center[0] - 1
-            center_int = center.astype(np.int32)
-            if cls_id < 0:
-                ignore_ids = [_ for _ in range(self.num_classes)] if cls_id == - 1 else [- cls_id - 2]
-                # Consider to make mask ignore
-                for cls_ig in ignore_ids:
-                    gen_hm_radius(hm_main_center[cls_ig], center_int, radius)
-                hm_main_center[ignore_ids, center_int[1], center_int[0]] = 0.9999
-                continue
-            gen_hm_radius(hm_main_center[cls_id], center, radius)
-            indices_center[k] = center_int[1] * hm_w + center_int[0]
-            cen_offset[k] = center - center_int
-            dimension[k, 0] = h
-            dimension[k, 1] = w
-            dimension[k, 2] = l
-            direction[k, 0] = math.sin(float(yaw))
-            direction[k, 1] = math.cos(float(yaw)) 
-            if hflipped:
-                direction[k, 0] = - direction[k, 0]
-            z_coor[k] = z - minZ
-            obj_mask[k] = 1
-        targets = {
-            'hm_cen': hm_main_center,
-            'cen_offset': cen_offset,
-            'direction': direction,
-            'z_coor': z_coor,
-            'dim': dimension,
-            'indices_center': indices_center,
-            'obj_mask': obj_mask, }
-        return targets
 
     def draw_img_with_label(self, index):
         sample_id = int(self.sample_id_list[index])
