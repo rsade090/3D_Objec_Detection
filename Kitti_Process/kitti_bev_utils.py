@@ -14,8 +14,8 @@ TOP_X_MAX = 100
 TOP_Z_MIN = -3.5
 TOP_Z_MAX = 0.6
 
-TOP_X_DIVISION = 0.2
-TOP_Y_DIVISION = 0.2
+TOP_X_DIVISION = 0.39137 #0.2
+TOP_Y_DIVISION = 0.23359#0.2
 TOP_Z_DIVISION = 0.3
 
 def lidar_to_top(lidar):
@@ -48,7 +48,7 @@ def lidar_to_top(lidar):
     #print("qxs,qyz,... shape is : ",qxs.shape,qys.shape,qzs.shape,prs.shape)
 
     X0, Xn = 0, int((TOP_X_MAX - TOP_X_MIN) // TOP_X_DIVISION) + 1
-    Y0, Yn = 0, int((TOP_Y_MAX - TOP_Y_MIN) // TOP_Y_DIVISION) + 1
+    Y0, Yn = 0, int((TOP_Y_MAX - TOP_Y_MIN) // TOP_Y_DIVISION) #+ 1
     Z0, Zn = 0, int((TOP_Z_MAX - TOP_Z_MIN) / TOP_Z_DIVISION)
     height = Xn - X0
     width = Yn - Y0

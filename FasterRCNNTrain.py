@@ -42,7 +42,10 @@ configs.dataset_dir = "/home/sadeghianr/Desktop/Datasets/Kitti/"
 
 
 train_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
-dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=48, pin_memory=True)
+dataloader_train = DataLoader(train_set, batch_size=16, shuffle=True,collate_fn=train_set.collate_fn,num_workers=16,  pin_memory=True) #,
+
+test_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
+dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=train_set.collate_fn, pin_memory=True)
 
 # create anchor boxes
 anc_scales = [2, 4, 6]
@@ -58,7 +61,7 @@ height_scale_factor = img_size[0] // out_h
 out_size = (out_h, out_w)
 name2idx = kittiCnf.CLASS_NAME_TO_ID
 idx2name = {v:k for k, v in name2idx.items()}
-n_classes = len(name2idx) - 1 # exclude pad idx
+n_classes = len(name2idx) #-1 # exclude pad idx
 roi_size = (2, 2)
 
 
@@ -115,25 +118,26 @@ def draw_rect(img, corners, filename):
   return
 
 def draw_Cube(img, corners,filename):
-  for start, end in BOX_CONNECTIONS:
-    x1, y1 = corners[0][0][start,:]
-    x2, y2 = corners[0][0][end,:]      
-    im = cv2.line(img[0].cpu().numpy(), (int(x1), int(y1)), (int(x2), int(y2)), (0,0,255), 1)  
-    cv2.imwrite(filename+'.jpg',im)
+  for i in range(corners.shape[1]):
+    for start, end in BOX_CONNECTIONS:
+      x1, y1 = corners[0][i][start,:]
+      x2, y2 = corners[0][i][end,:]      
+      im = cv2.line(img[0].cpu().numpy(), (int(x1), int(y1)), (int(x2), int(y2)), (0,0,255), 1)  
+      cv2.imwrite(filename+'.jpg',im)
   return      
 
-TrainMode = True
-#detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model49.pt"))
+TrainMode = False
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_train_b16_5cls/model240.pt"))
 if TrainMode:
-  epochs = 500
+  epochs = 800
   loss_list = []
   for i in range(epochs):
     total_loss = 0
     count = 0
     for data in tqdm(dataloader_train):        
         img, bev, fov, targetBox, targetLabel = data
-        imgs =  (transform(torch.permute(img, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
-        bevs = (transform(torch.permute(bev, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
+        imgs =  ((torch.permute(img, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
+        bevs = ((torch.permute(bev, (0,3, 1, 2)))).to(args.device, dtype=torch.float32) #transform(
         targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
         targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
         detector.train()
@@ -145,25 +149,30 @@ if TrainMode:
         count += 1
     writer.add_scalar("Loss/train", total_loss/len(dataloader_train), i)
     #save model
-    torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_num48_train_b4/model"+str(i)+".pt")
+    if i % 10==0:
+      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_train_b16_5cls/model"+str(i+140)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
   print()
 
 # Test and inference the model
 # load the model
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_num48_train_b4/model.pt"))
-testMode = False
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/2d_256_256_train_b16_5cls/model750.pt"))
+testMode = True
+count = 0
+for data in tqdm(dataloader_test):
 
-for data in tqdm(dataloader_train):
-  if testMode:
-          data = train_set.__getitem__(100)
   img, bev, fov, targetBox, targetLabel = data
-  im = img.clone()
-  draw_rect(im, targetBox, "beforeTrainRect")
-  draw_Cube(im, targetBox, "beforeTrainCube")
+  
+  if count < 50 :
+    im = img.clone()
+    draw_rect(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/imageResults_5cls/beforeRect"+str(count))
+    im = img.clone()
+    draw_Cube(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/imageResults_5cls/beforeCube"+str(count))
+  else:
+     print()
   imgs = (transform(torch.permute(img, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
-  bevs = (transform(torch.permute(bev, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
+  bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)#(transform
   targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
   targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
   detector.eval()
@@ -183,8 +192,11 @@ for data in tqdm(dataloader_train):
   #img3 = cv2.rectangle(img[0].cpu().numpy(), (int(bboxes[0][0]), int(bboxes[0][1])), (int(bboxes[0][2]), int(bboxes[0][3])), (255,0,0),1)
   for i in range(prop_proj_1[0].shape[0]):
     img4 = cv2.rectangle(img[0].cpu().numpy(), (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])), (int(prop_proj_1[0][i][2]), int(prop_proj_1[0][i][3])), (0,255,0),1)
-    cv2.putText(img4, classes_pred_1[i], (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 1)
-  print()
+    cv2.putText(img4, classes_pred_1[i], (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (36,255,12), 1)
+    if count < 50 :
+      cv2.imwrite("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/imageResults_5cls/result"+str(count)+".jpg", img4)  
+  count+=1
+
   # nrows, ncols = (2, 2)
   # fig, axes = plt.subplots(nrows, ncols, figsize=(16, 8))
   # fig, axes = display_img(imgs, fig, axes)

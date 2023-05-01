@@ -328,9 +328,9 @@ def project_bboxes(bboxes, width_scale_factor, height_scale_factor, mode='a2p'):
             tmp = []
             for box in bboxes[i]:
                 minx = min(box[:,0])
-                miny = min(box[0,:])
+                miny = min(box[:,1])
                 maxx = max(box[:,0])
-                maxy = max(box[0,:])
+                maxy = max(box[:,1])
                 tmp = torch.stack([minx,miny,maxx,maxy])
                 bboxes_all.append(tmp)
             proj_bboxes.append(torch.stack(bboxes_all))

@@ -13,10 +13,10 @@ CLASS_NAME_TO_ID = {
     'Cyclist': 2,
     'Van': 3,
     'Truck': 4,
-    'Person_sitting':5,
-    'Tram': 6,
-    'Misc': 7,
-    'DontCare': 8
+    # 'Person_sitting':5,
+    # 'Tram': 6,
+    # 'Misc': 7,
+    # 'DontCare': 8
 }
 
 colors = [[0, 255, 255], [0, 0, 255], [255, 0, 0], [255, 120, 0],

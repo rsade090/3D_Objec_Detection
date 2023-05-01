@@ -43,10 +43,7 @@ class KittiDataset(Dataset):
         return len(self.sample_id_list)
 
     def __getitem__(self, index):
-        if self.is_test:
-            return self.load_img_only(index)
-        else:
-            return self.load_img_with_targets(index)
+        return self.load_img_with_targets(index)
 
     def load_img_only(self, index):
         """Load only image for the testing phase"""
@@ -63,6 +60,7 @@ class KittiDataset(Dataset):
         img_path = os.path.join(self.image_dir, '{:06d}.png'.format(sample_id))
         lidarData = self.get_lidar(sample_id)
         img_path, img_rgb = self.get_image(sample_id)
+        #print("image path is: ",img_path)
         calib = self.get_calib(sample_id)
         labelsM, has_labels, orig_label = self.get_label(sample_id)
         bev_map = self.get_BEV(index)
@@ -75,6 +73,8 @@ class KittiDataset(Dataset):
         gt_idxs_all = []
         gt_idxs = []
         for obj in orig_label:
+            if obj[0] not in cnf.CLASS_NAME_TO_ID.keys():
+                continue
             res= compute_box_3d(obj)
             pts = project_to_image(res, calib.P2)
             for i in range(pts.shape[0]):
@@ -202,6 +202,8 @@ class KittiDataset(Dataset):
             line = line.rstrip()
             line_parts = line.split(' ')
             obj_name = line_parts[0]
+            if obj_name not in cnf.CLASS_NAME_TO_ID.keys():
+                continue
             cat_id = int(cnf.CLASS_NAME_TO_ID[obj_name])
             if cat_id <= -99: 
                 continue
