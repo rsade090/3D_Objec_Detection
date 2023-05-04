@@ -73,6 +73,7 @@ class DataAugmentation():
         allbevs = []
         allfovs = []
         count = 0
+        indexbox = 0 #torch.randint(bboxes.shape[1], (1,1))
         for boxes in bboxes:
             image = imagee[count]
             label = labels[count]
@@ -80,13 +81,19 @@ class DataAugmentation():
             bev = bevs[count]
 
             count += 1
+            boxCount = 0
             for j in range(boxes.shape[0]):
+                if indexbox != boxCount:
+                    continue
+                boxCount +=1
                 posxy = torch.randint(256, (1, 2))
                 xpos, ypos = 127, 127 #posxy[0][0], posxy[0][1] 
                 minx = min(boxes[j][:,0])
                 miny = min(boxes[j][:,1])
                 maxx = max(boxes[j][:,0])
                 maxy = max(boxes[j][:,1])
+                if minx == -1 or miny == -1 or maxx == -1 or maxy == -1 :
+                    continue
                 boxcx = (maxx - minx)/2 + minx
                 boxcy = (maxy - miny)/2 + miny
                 boximg = image[int(miny): int(maxy), int(minx): int(maxx)]
