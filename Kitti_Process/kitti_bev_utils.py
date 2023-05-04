@@ -14,8 +14,8 @@ TOP_X_MAX = 100
 TOP_Z_MIN = -3.5
 TOP_Z_MAX = 0.6
 
-TOP_X_DIVISION = 0.39137 #0.2
-TOP_Y_DIVISION = 0.23359#0.2
+TOP_X_DIVISION = 0.39137 #0.15618 #0.2
+TOP_Y_DIVISION = 0.23359 #0.31308 #0.27813 # # #0.2
 TOP_Z_DIVISION = 0.3
 
 def lidar_to_top(lidar):
@@ -44,8 +44,8 @@ def lidar_to_top(lidar):
     # qzs=((pzs-TOP_Z_MIN)//TOP_Z_DIVISION).astype(np.int32)
     qzs = (pzs - TOP_Z_MIN) / TOP_Z_DIVISION
     quantized = np.dstack((qxs, qys, qzs, prs)).squeeze()
-    #print("quanitixed shape is : ",quantized.shape)
-    #print("qxs,qyz,... shape is : ",qxs.shape,qys.shape,qzs.shape,prs.shape)
+    # print("quanitixed shape is : ",quantized.shape)
+    # print("qxs,qyz,... shape is : ",qxs.shape,qys.shape,qzs.shape,prs.shape)
 
     X0, Xn = 0, int((TOP_X_MAX - TOP_X_MIN) // TOP_X_DIVISION) + 1
     Y0, Yn = 0, int((TOP_Y_MAX - TOP_Y_MIN) // TOP_Y_DIVISION) #+ 1
@@ -88,6 +88,48 @@ def lidar_to_top(lidar):
                     max_height = max(0, np.max(quantized_xyz[:, 2]) - z)
                     top[yy, xx, zz] = max_height
     return top 
+
+
+def lidar_to_top_coords(x, y):
+    # print("TOP_X_MAX-TOP_X_MIN:",TOP_X_MAX,TOP_X_MIN)
+    Xn = int((TOP_X_MAX - TOP_X_MIN) // TOP_X_DIVISION) + 1
+    Yn = int((TOP_Y_MAX - TOP_Y_MIN) // TOP_Y_DIVISION) + 1
+    xx = Yn - int((y - TOP_Y_MIN) // TOP_Y_DIVISION)
+    yy = Xn - int((x - TOP_X_MIN) // TOP_X_DIVISION)
+
+    return xx, yy
+def draw_box3d_on_top(image, boxes3d, color=(255, 255, 255), thickness=1, scores=None, text_lables=[], is_gt=False,):
+    # if scores is not None and scores.shape[0] >0:
+    # print(scores.shape)
+    # scores=scores[:,0]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    img = image.copy()
+    num = len(boxes3d)
+    startx = 5
+    for n in range(num):
+        b = boxes3d[n]
+        x0 = b[0, 0]
+        y0 = b[0, 1]
+        x1 = b[1, 0]
+        y1 = b[1, 1]
+        x2 = b[2, 0]
+        y2 = b[2, 1]
+        x3 = b[3, 0]
+        y3 = b[3, 1]
+        u0, v0 = lidar_to_top_coords(x0, y0)
+        u1, v1 = lidar_to_top_coords(x1, y1)
+        u2, v2 = lidar_to_top_coords(x2, y2)
+        u3, v3 = lidar_to_top_coords(x3, y3)
+        color = (0, 255, 0)
+        startx = 5
+        cv2.line(img, (u0, v0), (u1, v1), color, thickness, cv2.LINE_AA)
+        cv2.line(img, (u1, v1), (u2, v2), color, thickness, cv2.LINE_AA)
+        cv2.line(img, (u2, v2), (u3, v3), color, thickness, cv2.LINE_AA)
+        cv2.line(img, (u3, v3), (u0, v0), color, thickness, cv2.LINE_AA)
+    for n in range(len(text_lables)):
+        text_pos = (startx, 25 * (n + 1))
+        cv2.putText(img, text_lables[n], text_pos, font, 0.5, color, 0, cv2.LINE_AA)
+    return img
 
 
 def makeBEVMap(PointCloud_, boundary):

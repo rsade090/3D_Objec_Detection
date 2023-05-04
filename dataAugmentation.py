@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from easydict import EasyDict as edict
 from tqdm import tqdm
 import torch
-import tensorflow as tf
+#import tensorflow as tf
 import config.kitti_config as cnf
 from torch.nn.utils.rnn import pad_sequence
 from torchvision import transforms
@@ -50,21 +50,21 @@ class DataAugmentation():
         return
 
 
-    def random_crop_image_Bbox(self):
-        BATCH_SIZE = 1
-        NUM_BOXES = 5
-        IMAGE_HEIGHT = 256
-        IMAGE_WIDTH = 256
-        CHANNELS = 3
-        CROP_SIZE = (24, 24)
-        image = tf.random.normal(shape=(
-        BATCH_SIZE, IMAGE_HEIGHT, IMAGE_WIDTH, CHANNELS) )
-        boxes = tf.random.uniform(shape=(NUM_BOXES, 4))
-        box_indices = tf.random.uniform(shape=(NUM_BOXES,), minval=0,
-        maxval=BATCH_SIZE, dtype=tf.int32)
-        output = tf.image.crop_and_resize(image, boxes, box_indices, CROP_SIZE)
-        print(output.shape)
-        return    
+    # def random_crop_image_Bbox(self):
+    #     BATCH_SIZE = 1
+    #     NUM_BOXES = 5
+    #     IMAGE_HEIGHT = 256
+    #     IMAGE_WIDTH = 256
+    #     CHANNELS = 3
+    #     CROP_SIZE = (24, 24)
+    #     image = tf.random.normal(shape=(
+    #     BATCH_SIZE, IMAGE_HEIGHT, IMAGE_WIDTH, CHANNELS) )
+    #     boxes = tf.random.uniform(shape=(NUM_BOXES, 4))
+    #     box_indices = tf.random.uniform(shape=(NUM_BOXES,), minval=0,
+    #     maxval=BATCH_SIZE, dtype=tf.int32)
+    #     output = tf.image.crop_and_resize(image, boxes, box_indices, CROP_SIZE)
+    #     print(output.shape)
+    #     return    
 
     def randPosCrop(self, imagee, bboxes, labels, bevs, fovs):
         images = []
@@ -82,11 +82,13 @@ class DataAugmentation():
             count += 1
             for j in range(boxes.shape[0]):
                 posxy = torch.randint(256, (1, 2))
-                xpos, ypos = 127, 127 #posxy[0][0], posxy[0][1] 
+                xpos, ypos = 127, 127  #posxy[0][0], posxy[0][1] # # 
                 minx = min(boxes[j][:,0])
                 miny = min(boxes[j][:,1])
                 maxx = max(boxes[j][:,0])
                 maxy = max(boxes[j][:,1])
+                if minx == -1 :
+                    continue
                 boxcx = (maxx - minx)/2 + minx
                 boxcy = (maxy - miny)/2 + miny
                 boximg = image[int(miny): int(maxy), int(minx): int(maxx)]
@@ -127,7 +129,14 @@ class DataAugmentation():
                             curbox[f,1] = 256
                     tmpboxes.append(curbox)
                     tmplabels.append(label[i])
-                    
+                if len(tmpboxes) > 0 :
+                    tmpboxes = torch.stack(tmpboxes)
+                    tmplabels = torch.stack(tmplabels)
+                    allbboxes.append(tmpboxes) 
+                    alllabels.append(tmplabels) 
+                    allbevs.append(bev)     
+                    allfovs.append(fov)
+                    break
                 tmpboxes = torch.stack(tmpboxes)
                 tmplabels = torch.stack(tmplabels)
                 self.draw_rect(mm, tmpboxes, tmplabels, 'afterCropBoxes')
@@ -151,7 +160,7 @@ def main():
     configs.imageSize = (375,1242)
     configs.max_objects = 50
     configs.num_classes = 3
-    configs.dataset_dir = "/home/hooshyarin/Documents/KITTI/"
+    configs.dataset_dir = "/home/sadeghianr/Desktop/Datasets/Kitti/"
     val_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
     dataloader_val = DataLoader(val_set, batch_size=1, shuffle=False, collate_fn=val_set.collate_fn, num_workers=2, pin_memory=True)
     for data in tqdm(dataloader_val):

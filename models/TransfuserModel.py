@@ -310,28 +310,28 @@ class Encoder(nn.Module):
             image_features = self.image_encoder.features.layer1(image_features)
             lidar_features = self.lidar_encoder._model.layer1(lidar_features)
             # fusion at (B, 64, 64, 64)
-            # image_embd_layer1 = self.avgpool(image_features)
-            # lidar_embd_layer1 = self.avgpool(lidar_features)
-            # image_features_layer1, lidar_features_layer1 = self.transformer1(image_embd_layer1, lidar_embd_layer1)#, velocity)
-            # #image_features_layer1 = F.interpolate(image_features_layer1, scale_factor=(6,20), mode='bilinear')
-            # #lidar_features_layer1 = F.interpolate(lidar_features_layer1, scale_factor=(6,20), mode='bilinear')
-            # image_features_layer1 = F.interpolate(image_features_layer1, scale_factor=(8,8), mode='bilinear')
-            # lidar_features_layer1 = F.interpolate(lidar_features_layer1, scale_factor=(8,8), mode='bilinear')
-            # image_features = image_features + image_features_layer1
-            # lidar_features = lidar_features + lidar_features_layer1
+            image_embd_layer1 = self.avgpool(image_features)
+            lidar_embd_layer1 = self.avgpool(lidar_features)
+            image_features_layer1, lidar_features_layer1 = self.transformer1(image_embd_layer1, lidar_embd_layer1)#, velocity)
+            #image_features_layer1 = F.interpolate(image_features_layer1, scale_factor=(6,20), mode='bilinear')
+            #lidar_features_layer1 = F.interpolate(lidar_features_layer1, scale_factor=(6,20), mode='bilinear')
+            image_features_layer1 = F.interpolate(image_features_layer1, scale_factor=(8,8), mode='bilinear')
+            lidar_features_layer1 = F.interpolate(lidar_features_layer1, scale_factor=(8,8), mode='bilinear')
+            image_features = image_features + image_features_layer1
+            lidar_features = lidar_features + lidar_features_layer1
 
             image_features = self.image_encoder.features.layer2(image_features)
             lidar_features = self.lidar_encoder._model.layer2(lidar_features)
             # fusion at (B, 128, 32, 32)
-            # image_embd_layer2 = self.avgpool(image_features)
-            # lidar_embd_layer2 = self.avgpool(lidar_features)
-            # image_features_layer2, lidar_features_layer2 = self.transformer2(image_embd_layer2, lidar_embd_layer2)#, velocity)
-            # #image_features_layer2 = F.interpolate(image_features_layer2, scale_factor=(3,10), mode='bilinear')
-            # #lidar_features_layer2 = F.interpolate(lidar_features_layer2, scale_factor=(3,10), mode='bilinear')
-            # image_features_layer2 = F.interpolate(image_features_layer2, scale_factor=(4,4), mode='bilinear')
-            # lidar_features_layer2 = F.interpolate(lidar_features_layer2, scale_factor=(4,4), mode='bilinear')
-            # image_features = image_features + image_features_layer2
-            # lidar_features = lidar_features + lidar_features_layer2
+            image_embd_layer2 = self.avgpool(image_features)
+            lidar_embd_layer2 = self.avgpool(lidar_features)
+            image_features_layer2, lidar_features_layer2 = self.transformer2(image_embd_layer2, lidar_embd_layer2)#, velocity)
+            #image_features_layer2 = F.interpolate(image_features_layer2, scale_factor=(3,10), mode='bilinear')
+            #lidar_features_layer2 = F.interpolate(lidar_features_layer2, scale_factor=(3,10), mode='bilinear')
+            image_features_layer2 = F.interpolate(image_features_layer2, scale_factor=(4,4), mode='bilinear')
+            lidar_features_layer2 = F.interpolate(lidar_features_layer2, scale_factor=(4,4), mode='bilinear')
+            image_features = image_features + image_features_layer2
+            lidar_features = lidar_features + lidar_features_layer2
 
             image_features = self.image_encoder.features.layer3(image_features)
             lidar_features = self.lidar_encoder._model.layer3(lidar_features)

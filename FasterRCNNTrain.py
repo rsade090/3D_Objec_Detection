@@ -38,25 +38,25 @@ parser.add_argument('--logdir', type=str, default='log', help='Directory to log 
 
 args = parser.parse_args()
 configs = edict()
-configs.hm_size = (152, 152)
+configs.hm_size = (152, 152)  #RRRR###
 configs.max_objects = 50
 configs.num_classes = 3
 configs.dataset_dir = "/home/sadeghianr/Desktop/Datasets/Kitti/"
-configs.imageSize =  (256,256) # (375,1242)(192, 640)
+configs.imageSize =  (375,1242)#(256,256) # (375,1242)(192, 640)    ##RRRR###
 train_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
 test_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
 print('number of train samples: ', len(train_set))
 print('number of test samples: ', len(train_set))
 
-dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=16, pin_memory=True)
-dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=train_set.collate_fn, num_workers=16, pin_memory=True)
+dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=8, pin_memory=True)
+dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=train_set.collate_fn, num_workers=8, pin_memory=True)
 
 # create anchor boxes
 anc_scales = [2, 4, 6]
 anc_ratios = [0.5, 1, 1.5]
 n_anc_boxes = len(anc_scales) * len(anc_ratios) # number of anchor boxes for each anchor point
-out_c, out_h, out_w = 256, 16, 16 #256, 12, 40 #2048, 15, 20
-anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(out_h, out_w))
+out_c, out_h, out_w = 256, 16, 16 #256, 12, 40 #2048, 15, 20      ##RRRR####
+anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(out_h, out_w))   ##RRR###
 anc_base = gen_anc_base(anc_pts_x, anc_pts_y, anc_scales, anc_ratios, (out_h, out_w))
 
 width_scale_factor = configs.imageSize[1] // out_w
@@ -65,7 +65,7 @@ out_size = (out_h, out_w)
 name2idx = kittiCnf.CLASS_NAME_TO_ID
 idx2name = {v:k for k, v in name2idx.items()}
 n_classes = len(name2idx) #-1 # exclude pad idx
-roi_size = (2, 2)
+roi_size = (2, 2)     ###RRRR###
 
 
 detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size)
@@ -74,7 +74,7 @@ optimizer = optim.Adam(detector.parameters(), lr=0.0001)
 transform = transforms.Compose([
   #transforms.Resize((216,640)),                         
   #transforms.Resize((480,640)),
-  transforms.RandomCrop(256)                         
+  transforms.RandomCrop(256)  ####RRRR####                       
 ])
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -82,7 +82,7 @@ param_count = count_parameters(detector)
 # number of trainable parameters -> 35848757
 
 
-BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3]]
+BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3]] ##RRR###
 def draw_rect(img, corners, filename):
   img3 = img[0]
   for i in range(corners.shape[1]):
@@ -109,7 +109,7 @@ def draw_Cube(img, corners,filename):
 
 dataAug = DataAugmentation()
 
-TrainMode = True
+TrainMode = False
 #detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model.pt"))
 if TrainMode:
   epochs = 800
@@ -133,7 +133,7 @@ if TrainMode:
         optimizer.step()
         total_loss += loss.item()
         count += 1
-    writer.add_scalar("Loss/train", total_loss/len(dataloader_train), i)
+    writer.add_scalar("Loss/train", total_loss/sample, i)
     #save model
     if i % 10==0:
       torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justCroppedimage/model"+str(i)+".pt")
@@ -143,13 +143,13 @@ if TrainMode:
 
 # Test and inference the model
 # load the model
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justCroppedimage/model750.pt"))
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justCroppedimage/model60.pt"))
 testMode = True
 count = 0
 for data in tqdm(dataloader_test):
 
   img, bev, fov, targetBox, targetLabel = data
-  
+  img, bev, fov, targetBox, targetLabel = dataAug.randPosCrop(img,targetBox,targetLabel, bev, fov)
   if count < 50 :
     im = img.clone()
     draw_rect(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justCroppedimage/beforeRect"+str(count))
