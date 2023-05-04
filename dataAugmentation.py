@@ -50,22 +50,6 @@ class DataAugmentation():
         return
 
 
-    # def random_crop_image_Bbox(self):
-    #     BATCH_SIZE = 1
-    #     NUM_BOXES = 5
-    #     IMAGE_HEIGHT = 256
-    #     IMAGE_WIDTH = 256
-    #     CHANNELS = 3
-    #     CROP_SIZE = (24, 24)
-    #     image = tf.random.normal(shape=(
-    #     BATCH_SIZE, IMAGE_HEIGHT, IMAGE_WIDTH, CHANNELS) )
-    #     boxes = tf.random.uniform(shape=(NUM_BOXES, 4))
-    #     box_indices = tf.random.uniform(shape=(NUM_BOXES,), minval=0,
-    #     maxval=BATCH_SIZE, dtype=tf.int32)
-    #     output = tf.image.crop_and_resize(image, boxes, box_indices, CROP_SIZE)
-    #     print(output.shape)
-    #     return    
-
     def randPosCrop(self, imagee, bboxes, labels, bevs, fovs):
         images = []
         allbboxes = []
@@ -73,6 +57,7 @@ class DataAugmentation():
         allbevs = []
         allfovs = []
         count = 0
+        indexbox = 0 #torch.randint(bboxes.shape[1], (1,1))
         for boxes in bboxes:
             image = imagee[count]
             label = labels[count]
@@ -80,31 +65,37 @@ class DataAugmentation():
             bev = bevs[count]
 
             count += 1
-            for j in range(boxes.shape[0]):
-                posxy = torch.randint(256, (1, 2))
-                xpos, ypos = 127, 127  #posxy[0][0], posxy[0][1] # # 
-                minx = min(boxes[j][:,0])
-                miny = min(boxes[j][:,1])
-                maxx = max(boxes[j][:,0])
-                maxy = max(boxes[j][:,1])
-                if minx == -1 :
-                    continue
-                boxcx = (maxx - minx)/2 + minx
-                boxcy = (maxy - miny)/2 + miny
-                boximg = image[int(miny): int(maxy), int(minx): int(maxx)]
+            boxCount = 0
+            found = False
+            for j in range(20):
+                
+                # if indexbox != boxCount:
+                #     continue
+                # boxCount +=1
+                # posxy = torch.randint(256, (1, 2))
+                # xpos, ypos = 127, 127  #posxy[0][0], posxy[0][1] # # 
+                # minx = min(boxes[j][:,0])
+                # miny = min(boxes[j][:,1])
+                # maxx = max(boxes[j][:,0])
+                # maxy = max(boxes[j][:,1])
+                # if minx == -1 or miny == -1 or maxx == -1 or maxy == -1 :
+                #     continue
+                # boxcx = (maxx - minx)/2 + minx
+                # boxcy = (maxy - miny)/2 + miny
+                # boximg = image[int(miny): int(maxy), int(minx): int(maxx)]
                 #do randCrop
-                cropminx = max(boxcx - xpos, 0)
-                cropminy = max(boxcy - ypos, 0)
+                cropminx = torch.randint(986, (1,)) #max(boxcx - xpos, 0)
+                cropminy = torch.randint(119, (1,)) #max(boxcy - ypos, 0)
                 cropmaxx = cropminx + 256
                 cropmaxy = cropminy + 256 
                 mimg = image[int(cropminy): min(int(cropmaxy), image.shape[0]), int(cropminx): min(int(cropmaxx), image.shape[1])].clone()
-                if mimg.shape[0] <= 220 or mimg.shape[1] <= 220:
-                    continue
+                if mimg.shape[0] != 256 or mimg.shape[1] != 256:
+                    print()
                 # calc the position of each box after crop
-                mm = transform(torch.permute(mimg, (2, 0, 1)))
-                mm = torch.permute(mm, (1, 2, 0))
-                #mm = cv2.resize(mimg.numpy(), dsize=(256,256), interpolation=cv2.INTER_LINEAR)
-                images.append(mm)
+                # mm = transform(torch.permute(mimg, (2, 0, 1)))
+                # mm = torch.permute(mm, (1, 2, 0))
+                # #mm = cv2.resize(mimg.numpy(), dsize=(256,256), interpolation=cv2.INTER_LINEAR)
+                
                 tmpboxes = []
                 tmplabels = []
                 for i in range(boxes.shape[0]):
@@ -112,7 +103,8 @@ class DataAugmentation():
                     curminx = min(curbox[:,0])
                     curminy = min(curbox[:,1])
                     curmaxx = max(curbox[:,0])
-                    curmaxy = max(curbox[:,1])     
+                    curmaxy = max(curbox[:,1])  
+                    s1 = (curmaxx - curminx) * (curmaxy - curminy)   
                     if curmaxx <= cropminx or curminy >= cropmaxy or curminx >= cropmaxx or curmaxy <= cropminy:
                         continue
                     curbox[:,0] = (curbox[:,0] - cropminx ) * (256/mimg.shape[1])
@@ -127,25 +119,31 @@ class DataAugmentation():
                             curbox[f,1] = 0
                         if curbox[f,1] > 256 : 
                             curbox[f,1] = 256
+                    s2 = (max(curbox[:,0]) - min(curbox[:,0])) * (max(curbox[:,1]) - min(curbox[:,1]))        
+                    if (s2 / s1) < (1 / 3):
+                        continue
                     tmpboxes.append(curbox)
                     tmplabels.append(label[i])
                 if len(tmpboxes) > 0 :
+                    images.append(mimg)
                     tmpboxes = torch.stack(tmpboxes)
                     tmplabels = torch.stack(tmplabels)
                     allbboxes.append(tmpboxes) 
                     alllabels.append(tmplabels) 
                     allbevs.append(bev)     
                     allfovs.append(fov)
+                    found = True
                     break
-                tmpboxes = torch.stack(tmpboxes)
-                tmplabels = torch.stack(tmplabels)
-                self.draw_rect(mm, tmpboxes, tmplabels, 'afterCropBoxes')
+                # tmpboxes = torch.stack(tmpboxes)
+                # tmplabels = torch.stack(tmplabels)
+                # # self.draw_rect(mm, tmpboxes, tmplabels, 'afterCropBoxes')
                                 
-                allbboxes.append(tmpboxes) 
-                alllabels.append(tmplabels) 
-                allbevs.append(bev)     
-                allfovs.append(fov)    
-
+                # allbboxes.append(tmpboxes) 
+                # alllabels.append(tmplabels) 
+                # allbevs.append(bev)     
+                # allfovs.append(fov)    
+            if not found:
+                print("not found any crops with boxes")
         #self.draw_rect(images[0], allbboxes[0], alllabels[0], 'afterAllCropBoxes')
         allbboxes = pad_sequence(allbboxes, batch_first=True, padding_value=-1)
         alllabels = pad_sequence(alllabels, batch_first=True, padding_value=-1)
@@ -168,7 +166,9 @@ def main():
         # show the image before the crop
         dataAug.draw_rect(img[0],targetBox[0],targetLabel[0], "beforeCrop")
         img_n, bev_n, fov_n, targetBox_n, targetLabel_n = dataAug.randPosCrop(img,targetBox,targetLabel, bev, fov)
- 
+        im = img_n[0]
+        dataAug.draw_rect(img_n[0],targetBox_n[0],targetLabel_n[0], "afterCrop")
+        print()
 
 if __name__ =="__main__":
     main()

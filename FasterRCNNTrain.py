@@ -38,7 +38,7 @@ parser.add_argument('--logdir', type=str, default='log', help='Directory to log 
 
 args = parser.parse_args()
 configs = edict()
-configs.hm_size = (152, 152)  #RRRR###
+configs.hm_size = (152, 152)  #RRRR### marboot be config
 configs.max_objects = 50
 configs.num_classes = 3
 configs.dataset_dir = "/home/sadeghianr/Desktop/Datasets/Kitti/"
@@ -48,14 +48,14 @@ test_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
 print('number of train samples: ', len(train_set))
 print('number of test samples: ', len(train_set))
 
-dataloader_train = DataLoader(train_set, batch_size=4, shuffle=True,collate_fn=train_set.collate_fn, num_workers=8, pin_memory=True)
+dataloader_train = DataLoader(train_set, batch_size=8, shuffle=True,collate_fn=train_set.collate_fn, num_workers=8, pin_memory=True)
 dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=train_set.collate_fn, num_workers=8, pin_memory=True)
 
 # create anchor boxes
 anc_scales = [2, 4, 6]
 anc_ratios = [0.5, 1, 1.5]
 n_anc_boxes = len(anc_scales) * len(anc_ratios) # number of anchor boxes for each anchor point
-out_c, out_h, out_w = 256, 16, 16 #256, 12, 40 #2048, 15, 20      ##RRRR####
+out_c, out_h, out_w = 256, 16, 16 #256, 12, 40 #2048, 15, 20      ##RRRR#### output transformer niyaz baraye twostage detector
 anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(out_h, out_w))   ##RRR###
 anc_base = gen_anc_base(anc_pts_x, anc_pts_y, anc_scales, anc_ratios, (out_h, out_w))
 
@@ -65,34 +65,34 @@ out_size = (out_h, out_w)
 name2idx = kittiCnf.CLASS_NAME_TO_ID
 idx2name = {v:k for k, v in name2idx.items()}
 n_classes = len(name2idx) #-1 # exclude pad idx
-roi_size = (2, 2)     ###RRRR###
+roi_size = (2, 2)     ###RRRR### vase pooling
 
 
 detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size)
 detector.to(args.device)
 optimizer = optim.Adam(detector.parameters(), lr=0.0001)
-transform = transforms.Compose([
+#transform = transforms.Compose([
   #transforms.Resize((216,640)),                         
   #transforms.Resize((480,640)),
-  transforms.RandomCrop(256)  ####RRRR####                       
-])
+  #transforms.RandomCrop(256)  ####RRRR####                       
+#])
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 param_count = count_parameters(detector)
 # number of trainable parameters -> 35848757
 
 
-BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3]] ##RRR###
+BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3]] ##RRR### connection corner of cube
 def draw_rect(img, corners, filename):
-  img3 = img[0]
+  img3 = img[0] # vase namayesh dim 0 ke nehsndahandeye batch ast bardashte shode
   for i in range(corners.shape[1]):
-    minx = min(corners[0][i][:,0]).numpy()
+    minx = min(corners[0][i][:,0]).numpy()#corners [batch][box][coordinate]
     miny = min(corners[0][i][:,1]).numpy()
     maxx = max(corners[0][i][:,0]).numpy()
     maxy = max(corners[0][i][:,1]).numpy()
-    img3 = cv2.rectangle(img[0].cpu().numpy(), (int(minx), int(miny)), (int(maxx), int(maxy)), (255,0,0),1)
-    imt = img[0]
-    imt = imt[int(miny): int(maxy), int(minx): int(maxx)]
+    img3 = cv2.rectangle(img[0].cpu().numpy(), (int(minx), int(miny)), (int(maxx), int(maxy)), (255,0,0),1)# chap-bala(min), rast-payin(max) 
+    imt = img[0]#vase namayesh dim 0 ke nehsndahandeye batch ast bardashte shode
+    imt = imt[int(miny): int(maxy), int(minx): int(maxx)]#crop ax vase namayesh(vase debug)
     print()
     #cv2.putText(img3, classes_pred_1[i], (int(minx), int(miny)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (36,255,12), 1)
   cv2.imwrite(filename+'.jpg', img3)       
@@ -109,7 +109,7 @@ def draw_Cube(img, corners,filename):
 
 dataAug = DataAugmentation()
 
-TrainMode = False
+TrainMode = True
 #detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model.pt"))
 if TrainMode:
   epochs = 800
@@ -133,18 +133,18 @@ if TrainMode:
         optimizer.step()
         total_loss += loss.item()
         count += 1
-    writer.add_scalar("Loss/train", total_loss/sample, i)
+    writer.add_scalar("Loss/train", total_loss/sample, i) #ezafe kardan data be tensorboard
     #save model
     if i % 10==0:
-      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justCroppedimage/model"+str(i)+".pt")
+      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model"+str(i)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
-  print()
+  
 
 # Test and inference the model
 # load the model
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justCroppedimage/model60.pt"))
-testMode = True
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model60.pt"))
+testMode = False
 count = 0
 for data in tqdm(dataloader_test):
 
@@ -157,7 +157,7 @@ for data in tqdm(dataloader_test):
     draw_Cube(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justCroppedimage/beforeCube"+str(count))
   else:
      print()
-  imgs = (transform(torch.permute(img, (0,3, 1, 2)))).to(args.device, dtype=torch.float32)
+  imgs = (torch.permute(img, (0,3, 1, 2))).to(args.device, dtype=torch.float32)
   bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)#(transform
   targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
   targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]

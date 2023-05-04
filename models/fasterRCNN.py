@@ -329,7 +329,7 @@ def project_bboxes(bboxes, width_scale_factor, height_scale_factor, mode='a2p'):
         for i in range(batch_size):
             bboxes_all = []
             tmp = []
-            for box in bboxes[i]:
+            for box in bboxes[i]:                #tabdil 8*2 be 4*2
                 minx = min(box[:,0])
                 miny = min(box[:,1])
                 maxx = max(box[:,0])
