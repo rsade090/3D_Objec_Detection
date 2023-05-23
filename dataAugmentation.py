@@ -50,10 +50,11 @@ class DataAugmentation():
         return
 
 
-    def randPosCrop(self, imagee, bboxes, labels, bevs, fovs):
+    def randPosCrop(self, imagee, bboxes, labels, categories, bevs, fovs):
         images = []
         allbboxes = []
         alllabels = []
+        allcategory=[]
         allbevs = []
         allfovs = []
         count = 0
@@ -61,6 +62,7 @@ class DataAugmentation():
         for boxes in bboxes:
             image = imagee[count]
             label = labels[count]
+            category= categories[count]
             fov = fovs[count]
             bev = bevs[count]
 
@@ -98,6 +100,7 @@ class DataAugmentation():
                 
                 tmpboxes = []
                 tmplabels = []
+                tmpcategories=[]
                 for i in range(boxes.shape[0]):
                     curbox = boxes[i].clone()
                     curminx = min(curbox[:,0])
@@ -124,12 +127,15 @@ class DataAugmentation():
                         continue
                     tmpboxes.append(curbox)
                     tmplabels.append(label[i])
+                    tmpcategories.append(category[i])
                 if len(tmpboxes) > 0 :
                     images.append(mimg)
                     tmpboxes = torch.stack(tmpboxes)
                     tmplabels = torch.stack(tmplabels)
+                    tmpcategories=torch.stack(tmpcategories)
                     allbboxes.append(tmpboxes) 
-                    alllabels.append(tmplabels) 
+                    alllabels.append(tmplabels)
+                    allcategory.append(tmpcategories) 
                     allbevs.append(bev)     
                     allfovs.append(fov)
                     found = True
@@ -145,9 +151,12 @@ class DataAugmentation():
             if not found:
                 print("not found any crops with boxes")
         #self.draw_rect(images[0], allbboxes[0], alllabels[0], 'afterAllCropBoxes')
+        #if allbboxes==[]:
+
         allbboxes = pad_sequence(allbboxes, batch_first=True, padding_value=-1)
         alllabels = pad_sequence(alllabels, batch_first=True, padding_value=-1)
-        return torch.stack(images), torch.stack(allbevs) , torch.stack(allfovs), allbboxes, alllabels
+        allcategory = pad_sequence(allcategory, batch_first=True, padding_value=-1)
+        return torch.stack(images), torch.stack(allbevs) , torch.stack(allfovs), allbboxes, alllabels, allcategory
 
 def main():
     print("some samples for testing augmentation methods")

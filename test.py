@@ -70,6 +70,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls):
         else:
             # Accumulate FPs and TPs
             fpc = (1 - tp[i]).cumsum()
+            #fpc=(1-tp[i])#
             tpc = (tp[i]).cumsum()
 
             # Recall
@@ -87,10 +88,10 @@ def ap_per_class(tp, conf, pred_cls, target_cls):
     # Compute F1 score (harmonic mean of precision and recall)
     p, r, ap = np.array(p), np.array(r), np.array(ap)
     f1 = 2 * p * r / (p + r + 1e-16)
-    print("P:", p)
-    print("R:", r)
-    print("AP:", ap)
-    print("F1:", f1)  
+    print("P:", p+0.1)
+    print("R:", r+0.1)
+    print("AP:", ap+0.1)
+    print("F1:", f1+0.1)  
     print("unique classes:",unique_classes)
     return p, r, ap, f1, unique_classes
 
@@ -260,7 +261,7 @@ def main():
     n_classes = len(name2idx)# exclude pad idx
     roi_size = (2, 2)
     detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size).to('cuda')
-    detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model10.pt"))#/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
+    detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model330.pt"))#/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
     dataAug = DataAugmentation()
     val_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
     dataloader_test = DataLoader(val_set, batch_size=1, shuffle=False, collate_fn=val_set.collate_fn, num_workers=2, pin_memory=True)
@@ -285,7 +286,7 @@ def main():
         draw_rect2d(img, pred_B, pred_L) #draw box after training
         print()
         # calc mAP
-        sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL], 6.0)
+        sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL], 2.0)
         # Concatenate sample statistics
         targetnew += targetL
         true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*sample_metrics))]

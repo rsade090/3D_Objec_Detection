@@ -76,6 +76,9 @@ optimizer = optim.Adam(detector.parameters(), lr=0.0001)
   #transforms.Resize((480,640)),
   #transforms.RandomCrop(256)  ####RRRR####                       
 #])
+transform = transforms.Compose([transforms.Resize((256,256)),])
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 param_count = count_parameters(detector)
@@ -110,7 +113,7 @@ def draw_Cube(img, corners,filename):
 dataAug = DataAugmentation()
 
 TrainMode = True
-#detector.load_state_dict(torch.load("/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model.pt"))
+#detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model390.pt"))
 if TrainMode:
   epochs = 800
   loss_list = []
@@ -119,11 +122,19 @@ if TrainMode:
     count = 0
     sample = 0
     for data in tqdm(dataloader_train):        
-        img, bev, fov, targetBox, targetLabel = data
-        img, bev, fov, targetBox, targetLabel = dataAug.randPosCrop(img,targetBox,targetLabel, bev, fov)
+        img, bev, fov, targetBox, targetLabel,x = data
+        img, bev, fov, targetBox, targetLabel,x = dataAug.randPosCrop(img,targetBox,targetLabel, x, bev, fov)
         sample += img.shape[0]
         imgs =  torch.permute(img, (0,3, 1, 2)).to(args.device, dtype=torch.float32)
+
+        ### if it is not cropped pr resized to (256*256) following command should be uncommented.##
+
+        #imgs =  transform(torch.permute(img, (0,3, 1, 2))).to(args.device, dtype=torch.float32)
+
+
         bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)
+
+
         targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
         targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
         detector.train()
@@ -136,14 +147,14 @@ if TrainMode:
     writer.add_scalar("Loss/train", total_loss/sample, i) #ezafe kardan data be tensorboard
     #save model
     if i % 10==0:
-      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model"+str(i)+".pt")
+      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model"+str(i+400)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
   
 
 # Test and inference the model
 # load the model
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model60.pt"))
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model390.pt"))
 testMode = False
 count = 0
 for data in tqdm(dataloader_test):
@@ -152,9 +163,9 @@ for data in tqdm(dataloader_test):
   img, bev, fov, targetBox, targetLabel = dataAug.randPosCrop(img,targetBox,targetLabel, bev, fov)
   if count < 50 :
     im = img.clone()
-    draw_rect(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justCroppedimage/beforeRect"+str(count))
+    draw_rect(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justRandomCroppedimage/beforeRect"+str(count))
     im = img.clone()
-    draw_Cube(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justCroppedimage/beforeCube"+str(count))
+    draw_Cube(im, targetBox, "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justRandomCroppedimage/beforeCube"+str(count))
   else:
      print()
   imgs = (torch.permute(img, (0,3, 1, 2))).to(args.device, dtype=torch.float32)
@@ -183,7 +194,7 @@ for data in tqdm(dataloader_test):
     img4 = cv2.rectangle(img[0].cpu().numpy(), (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])), (int(prop_proj_1[0][i][2]), int(prop_proj_1[0][i][3])), (0,255,0),1)
     cv2.putText(img4, classes_pred_1[i], (int(prop_proj_1[0][i][0]), int(prop_proj_1[0][i][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (36,255,12), 1)
     if count < 50 :
-      cv2.imwrite("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justCroppedimage/result"+str(count)+".jpg", img4)  
+      cv2.imwrite("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/imageResults/crop256_justRandomCroppedimage/result"+str(count)+".jpg", img4)  
   count+=1
 
   # nrows, ncols = (2, 2)

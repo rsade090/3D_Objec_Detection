@@ -82,12 +82,11 @@ class KittiDataset(Dataset):
         gt_boxes_all = []
         gt_idxs_all = []
         gt_idxs = []
-        gt_category=[]
         for obj in orig_label:
             if obj[0] not in cnf.CLASS_NAME_TO_ID.keys():
                 continue
             res= compute_box_3d(obj)
-            pts = project_to_image(res, calib.P2) # pts=8*2 # res= 8*3
+            pts = project_to_image(res, calib.P2)
             for i in range(pts.shape[0]):
                 for j in range(pts.shape[1]):
                     if pts[i][j] < 0 :
@@ -98,25 +97,12 @@ class KittiDataset(Dataset):
             obj[6] = int(float(obj[6])) * (img_rgb.shape[1]/ 1242)
             obj[5] = int(float(obj[5])) * (img_rgb.shape[0]/ 375)
             obj[7] = int(float(obj[7])) * (img_rgb.shape[0]/ 375)
-            ##Reza add the following code##
-            Height_px= obj[7]- obj[5]
-            if Height_px >= 40 and float(obj[1])<= 0.15 and int(obj[2])== 0 :
-                gt_category.append(0)
-            elif Height_px >= 25 and float(obj[1])<= 0.30 and int(obj[2])== 1 :
-                gt_category.append(1)
-            else:
-                gt_category.append(2)
-            #if Height_px >= 25 and float(obj[1])<= 0.50 and int(obj[2])== 2 :
-                #gt_category.append[2]
-    
-            #end of coding
             pts2d = [obj[4],obj[5],obj[6],obj[7]]
             gt_boxes_all.append(torch.from_numpy(pts))
             gt_idxs.append(int(cnf.CLASS_NAME_TO_ID[obj[0]]))
         gt_boxes_all = torch.stack(gt_boxes_all)    
         gt_idxs = torch.Tensor(gt_idxs)
-        gt_category=torch.Tensor(gt_category)
-        return img_rgb, bev_map, fov_maps, gt_boxes_all, gt_idxs, gt_category
+        return img_rgb, bev_map, fov_maps, gt_boxes_all,gt_idxs 
 
     def collate_fn(self, batch):
         images = list()
@@ -124,7 +110,6 @@ class KittiDataset(Dataset):
         labels = list()
         bevs = list()
         fovs = list()
-        category=list()
         for b in batch:
             images.append(b[0])
             bevs.append(b[1])
@@ -132,16 +117,13 @@ class KittiDataset(Dataset):
             if self.mode != 'test':
                 boxes.append(b[3])
                 labels.append(torch.Tensor(b[4]))
-                category.append(torch.Tensor(b[5]))
         images = torch.stack(images, dim=0)
         bevs = torch.stack(bevs, dim=0)
         fovs = torch.stack(fovs, dim=0)
         if self.mode != 'test':
             boxes = pad_sequence(boxes, batch_first=True, padding_value=-1)
             labels = pad_sequence(labels, batch_first=True, padding_value=-1)
-            category = pad_sequence(category, batch_first=True, padding_value=-1)
-
-        return images,bevs, fovs, boxes, labels, category
+        return images,bevs, fovs, boxes, labels
 
     def get_image(self, idx):
         img_path = os.path.join(self.image_dir, '{:06d}.png'.format(idx))
