@@ -234,7 +234,13 @@ class Encoder(nn.Module):
         self.config = config
         self.avgpool = nn.AdaptiveAvgPool2d((self.config.vert_anchors, self.config.horz_anchors))    
         self.image_encoder = ImageCNN(512, normalize=True)
-        self.lidar_encoder = LidarEncoder(num_classes=512, in_channels=15)
+
+        ## BEV
+        #self.lidar_encoder = LidarEncoder(num_classes=512, in_channels=15)
+
+
+        ## FOV
+        self.lidar_encoder = LidarEncoder(num_classes=512, in_channels=3)
         
         self.transformer1 = GPT(n_embd=64,
                             n_head=config.n_head, 

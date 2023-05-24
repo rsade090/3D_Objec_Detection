@@ -17,6 +17,7 @@ from config import kitti_config as cnf
 from utils.visualization_utils import compute_box_3d, project_to_image
 from torch.nn.utils.rnn import pad_sequence
 from torchvision import transforms
+import matplotlib.pyplot as plt
 
 BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3], [1, 6], [2, 5]]
 IMG_WIDTH, IMG_HEIGHT = 1242, 375
@@ -75,9 +76,19 @@ class KittiDataset(Dataset):
         labelsM, has_labels, orig_label = self.get_label(sample_id)
         bev_map = self.get_BEV(index)
         fov_maps = self.get_FOV(index)
+        fov_maps= np.concatenate((fov_maps[0],fov_maps[1],fov_maps[2]), axis=2)
+
+        """
+        plt.figure(figsize = (20,8))
+        plt.imshow(np.squeeze(fov_maps[0]))
+        plt.figure(figsize = (20,8))
+        plt.imshow(np.squeeze(fov_maps[1]))
+        plt.figure(figsize = (20,8))
+        plt.imshow(np.squeeze(fov_maps[2]))
+        """
         img_rgb = cv2.resize(img_rgb, dsize=(self.imageSize[1],self.imageSize[0]), interpolation=cv2.INTER_LINEAR)
         bev_map = torch.from_numpy(bev_map[0]) #torch.Tensor([torch.from_numpy(bevs) for bevs in bev_map])
-        fov_maps = torch.from_numpy(fov_maps[0])
+        fov_maps = torch.from_numpy(fov_maps)
         img_rgb = torch.from_numpy(img_rgb)
         gt_boxes_all = []
         gt_idxs_all = []

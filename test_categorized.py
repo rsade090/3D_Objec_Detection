@@ -1,5 +1,6 @@
 from torchvision import transforms
 import cv2
+import matplotlib.pyplot as plt
 from Kitti_Process.kittiDataset import KittiDataset
 from torch.utils.data import DataLoader
 from easydict import EasyDict as edict
@@ -90,7 +91,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, target_cat, pred_cat):
             
             n_gt=0
             for x in range(len(unique_classes1)):
-                if (unique_classes1[x]==c and unique_category1[x]==g) or [unique_classes1[x]==c and unique_category1[x]==g-1] or [unique_classes1[x]==c and unique_category1[x]==g-2] :
+                if (unique_classes1[x]==c and unique_category1[x]==g): #or [unique_classes1[x]==c and unique_category1[x]==g-1] or [unique_classes1[x]==c and unique_category1[x]==g-2] :
                     n_gt += 1    # number of ground truth objects
             #n_gt = (torch.tensor(unique_classes1) == c).sum()  # Number of ground truth objects
             i = torch.tensor(pred_cls) == c
@@ -371,7 +372,7 @@ def main():
     n_classes = len(name2idx)# exclude pad idx
     roi_size = (2, 2)
     detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size).to('cuda')
-    detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model330.pt"))#/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
+    detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model810.pt"))#/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
     dataAug = DataAugmentation()
     val_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
     dataloader_test = DataLoader(val_set, batch_size=1, shuffle=False, collate_fn=val_set.collate_fn, num_workers=2, pin_memory=True)
@@ -383,14 +384,28 @@ def main():
     for data in tqdm(dataloader_test):
         img, bev, fov, targetBox, targetLabel, targetCategory = data
         img, bev, fov, targetBox, targetLabel, targetCategory = dataAug.randPosCrop(img,targetBox,targetLabel,targetCategory, bev, fov)
+
+        """
+        plt.figure(figsize = (20,8))
+        plt.imshow(np.squeeze(img))
+        plt.figure(figsize = (20,8))
+        plt.imshow(np.squeeze(fov[0][:,:,0]))
+        plt.figure(figsize = (20,8))
+        plt.imshow(np.squeeze(fov[0][:,:,1]))
+        plt.figure(figsize = (20,8))
+        plt.imshow(np.squeeze(fov[0][:,:,2]))
+        """
+
+
         imgs = (torch.permute(img, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
         bevs = (torch.permute(bev, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
+        fovs= (torch.permute(fov, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
         targetB = [v.to('cuda', dtype=torch.float32) for v in targetBox]
         targetL = [t.to('cuda', dtype=torch.int64) for t in targetLabel]
         targetC = [c.to('cuda', dtype=torch.int64) for c in targetCategory]
 
         detector.eval()
-        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevs, conf_thresh=0.95, nms_thresh=0.1) 
+        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevs, conf_thresh=0.99, nms_thresh=0.1) 
         proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
         framelabels = [idx2name[cls] for cls in targetLabel[0].tolist()]
         draw_rect(img, targetBox, "MainImages", framelabels) # draw box before training
@@ -401,7 +416,7 @@ def main():
         draw_rect2d(img, pred_B, pred_L) #draw box after training
         print()
         # calc mAP
-        sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL,targetC], 0.7)
+        sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL,targetC], 3.0)
         # Concatenate sample statistics
         targetnew += targetL
         targetnewCatg +=targetC

@@ -91,6 +91,9 @@ class DataAugmentation():
                 cropmaxx = cropminx + 256
                 cropmaxy = cropminy + 256 
                 mimg = image[int(cropminy): min(int(cropmaxy), image.shape[0]), int(cropminx): min(int(cropmaxx), image.shape[1])].clone()
+
+                mfov = fov[int(cropminy): min(int(cropmaxy), image.shape[0]), int(cropminx): min(int(cropmaxx), image.shape[1])].clone()
+
                 if mimg.shape[0] != 256 or mimg.shape[1] != 256:
                     print()
                 # calc the position of each box after crop
@@ -137,7 +140,7 @@ class DataAugmentation():
                     alllabels.append(tmplabels)
                     allcategory.append(tmpcategories) 
                     allbevs.append(bev)     
-                    allfovs.append(fov)
+                    allfovs.append(mfov)
                     found = True
                     break
                 # tmpboxes = torch.stack(tmpboxes)

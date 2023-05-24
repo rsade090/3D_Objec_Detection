@@ -133,12 +133,13 @@ if TrainMode:
 
 
         bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)
+        fovs= (torch.permute(fov, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
 
 
         targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
         targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
         detector.train()
-        loss = detector(imgs, bevs, targetB, targetL)
+        loss = detector(imgs, fovs, targetB, targetL)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -170,6 +171,7 @@ for data in tqdm(dataloader_test):
      print()
   imgs = (torch.permute(img, (0,3, 1, 2))).to(args.device, dtype=torch.float32)
   bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)#(transform
+  fovs= (torch.permute(fov, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
   targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
   targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
   detector.eval()
