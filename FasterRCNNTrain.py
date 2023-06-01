@@ -113,7 +113,7 @@ def draw_Cube(img, corners,filename):
 dataAug = DataAugmentation()
 
 TrainMode = True
-#detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model390.pt"))
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights//Randomcropped_FOV/model70.pt"))
 if TrainMode:
   epochs = 800
   loss_list = []
@@ -148,14 +148,14 @@ if TrainMode:
     writer.add_scalar("Loss/train", total_loss/sample, i) #ezafe kardan data be tensorboard
     #save model
     if i % 10==0:
-      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/Randomcropped_FOV/model"+str(i)+".pt")
+      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/Randomcropped_FOV/model"+str(i+80)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
   
 
 # Test and inference the model
 # load the model
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model390.pt"))
+detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights//Randomcropped_FOV/model70.pt"))
 testMode = False
 count = 0
 for data in tqdm(dataloader_test):
