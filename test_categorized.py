@@ -400,6 +400,7 @@ def main():
         imgs = (torch.permute(img, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
         bevs = (torch.permute(bev, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
         fovs= (torch.permute(fov, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
+        bevCatfov = torch.cat((bevs,fovs),1)
         targetB = [v.to('cuda', dtype=torch.float32) for v in targetBox]
         targetL = [t.to('cuda', dtype=torch.int64) for t in targetLabel]
         targetC = [c.to('cuda', dtype=torch.int64) for c in targetCategory]
@@ -407,7 +408,7 @@ def main():
         detector.eval()
         ## baraye avaz kardan fovs and bevs faghat khate badi ro avaz kon
 
-        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, fovs, conf_thresh=0.99, nms_thresh=0.1) 
+        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevCatfov, conf_thresh=0.99, nms_thresh=0.1) 
         proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
         framelabels = [idx2name[cls] for cls in targetLabel[0].tolist()]
         draw_rect(img, targetBox, "MainImages", framelabels) # draw box before training
