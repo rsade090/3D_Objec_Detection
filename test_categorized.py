@@ -143,10 +143,10 @@ def ap_per_class(tp, conf, pred_cls, target_cls, target_cat, pred_cat):
         else:
             print("Hard results is:\n")
 
-        print("P:", p+0.05)
+        print("P:", p)
         print("R:", r)
-        print("AP:", apeasy+0.05)
-        print("F1:", f1+0.05)  
+        print("AP:", apeasy)
+        print("F1:", f1)  
         print("unique classes:",unique_classes)
         print("unique_category:", unique_category)
     return p, r, apeasy, f1, unique_classes,unique_category
@@ -188,10 +188,10 @@ def ap_per_class(tp, conf, pred_cls, target_cls, target_cat, pred_cat):
     # Compute F1 score (harmonic mean of precision and recall)
     p, r, apeasy = np.array(p), np.array(r), np.array(apeasy)
     f1 = 2 * p * r / (p + r + 1e-16)
-    print("P:", p+0.1)
-    print("R:", r+0.1)
-    print("AP:", apeasy+0.1)
-    print("F1:", f1+0.1)  
+    print("P:", p)
+    print("R:", r)
+    print("AP:", apeasy)
+    print("F1:", f1)  
     print("unique classes:",unique_classes)
 
     return p, r, apeasy, f1, unique_classes
@@ -372,7 +372,7 @@ def main():
     n_classes = len(name2idx)# exclude pad idx
     roi_size = (2, 2)
     detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size).to('cuda')
-    detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model810.pt"))#/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
+    detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/randomcropped_BEVcatFOV/model170.pt"))#/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
     dataAug = DataAugmentation()
     val_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
     dataloader_test = DataLoader(val_set, batch_size=1, shuffle=False, collate_fn=val_set.collate_fn, num_workers=2, pin_memory=True)
@@ -405,7 +405,9 @@ def main():
         targetC = [c.to('cuda', dtype=torch.int64) for c in targetCategory]
 
         detector.eval()
-        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevs, conf_thresh=0.99, nms_thresh=0.1) 
+        ## baraye avaz kardan fovs and bevs faghat khate badi ro avaz kon
+
+        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, fovs, conf_thresh=0.99, nms_thresh=0.1) 
         proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
         framelabels = [idx2name[cls] for cls in targetLabel[0].tolist()]
         draw_rect(img, targetBox, "MainImages", framelabels) # draw box before training
@@ -416,7 +418,7 @@ def main():
         draw_rect2d(img, pred_B, pred_L) #draw box after training
         print()
         # calc mAP
-        sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL,targetC], 3.0)
+        sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL,targetC], 0.7)
         # Concatenate sample statistics
         targetnew += targetL
         targetnewCatg +=targetC

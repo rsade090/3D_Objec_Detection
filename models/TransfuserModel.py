@@ -240,7 +240,7 @@ class Encoder(nn.Module):
 
 
         ## FOV
-        self.lidar_encoder = LidarEncoder(num_classes=512, in_channels=3)
+        self.lidar_encoder = LidarEncoder(num_classes=512, in_channels=18)
         
         self.transformer1 = GPT(n_embd=64,
                             n_head=config.n_head, 

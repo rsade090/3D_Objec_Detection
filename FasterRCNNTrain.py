@@ -113,7 +113,7 @@ def draw_Cube(img, corners,filename):
 dataAug = DataAugmentation()
 
 TrainMode = True
-detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights//Randomcropped_FOV/model70.pt"))
+#detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights//Randomcropped_FOV/model70.pt"))
 if TrainMode:
   epochs = 800
   loss_list = []
@@ -135,11 +135,14 @@ if TrainMode:
         bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)
         fovs= (torch.permute(fov, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
 
+        #concatenate the bev and fov
+        bevCatfov = torch.cat((bevs,fovs),1)
+
 
         targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
         targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
         detector.train()
-        loss = detector(imgs, fovs, targetB, targetL)
+        loss = detector(imgs, bevCatfov, targetB, targetL)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -148,7 +151,7 @@ if TrainMode:
     writer.add_scalar("Loss/train", total_loss/sample, i) #ezafe kardan data be tensorboard
     #save model
     if i % 10==0:
-      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/Randomcropped_FOV/model"+str(i+80)+".pt")
+      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/randomcropped_BEVcatFOV/model"+str(i)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
   
