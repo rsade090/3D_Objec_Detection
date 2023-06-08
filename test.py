@@ -88,10 +88,10 @@ def ap_per_class(tp, conf, pred_cls, target_cls):
     # Compute F1 score (harmonic mean of precision and recall)
     p, r, ap = np.array(p), np.array(r), np.array(ap)
     f1 = 2 * p * r / (p + r + 1e-16)
-    print("P:", p+0.1)
-    print("R:", r+0.1)
-    print("AP:", ap+0.1)
-    print("F1:", f1+0.1)  
+    print("P:", p)
+    print("R:", r)
+    print("AP:", ap)
+    print("F1:", f1)  
     print("unique classes:",unique_classes)
     return p, r, ap, f1, unique_classes
 
