@@ -4,7 +4,7 @@
 python 3.10.9,
 pytorch 1.13.1,
 Cuda 11.6,
-gcc 11.2.0,
+gcc 11.2.0
 
 ### train and test
 For the training FasterRCNNTrain.py file should be run.
