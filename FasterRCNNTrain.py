@@ -151,7 +151,7 @@ if TrainMode:
     writer.add_scalar("Loss/train", total_loss/sample, i) #ezafe kardan data be tensorboard
     #save model
     if i % 10==0:
-      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/randomcropped_BEVcatFOV/model"+str(i)+".pt")
+      torch.save(detector.state_dict(), "/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/rgb_withoutfusion/model"+str(i)+".pt")
     loss_list.append(total_loss/len(dataloader_train))
   writer.flush()  
   

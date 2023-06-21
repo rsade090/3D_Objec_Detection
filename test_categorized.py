@@ -400,7 +400,6 @@ def main():
         imgs = (torch.permute(img, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
         bevs = (torch.permute(bev, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
         fovs= (torch.permute(fov, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
-        bevCatfov = torch.cat((bevs,fovs),1)
         targetB = [v.to('cuda', dtype=torch.float32) for v in targetBox]
         targetL = [t.to('cuda', dtype=torch.int64) for t in targetLabel]
         targetC = [c.to('cuda', dtype=torch.int64) for c in targetCategory]
@@ -408,15 +407,15 @@ def main():
         detector.eval()
         ## baraye avaz kardan fovs and bevs faghat khate badi ro avaz kon
 
-        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevCatfov, conf_thresh=0.99, nms_thresh=0.1) 
+        proposals_final, conf_scores_final, classes_final = detector.inference(imgs,fovs, conf_thresh=0.99, nms_thresh=0.1) 
         proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
         framelabels = [idx2name[cls] for cls in targetLabel[0].tolist()]
-        draw_rect(img, targetBox, "MainImages", framelabels) # draw box before training
+        #draw_rect(img, targetBox, "MainImages", framelabels) # draw box before training
         im = img[0]
         pred_B = project_bboxes(proposals_final, width_scale_factor, height_scale_factor, mode='a2p')
         pred_L = classes_final #[idx2name[cls] for cls in classes_final[0].tolist()]
         pred_S = conf_scores_final
-        draw_rect2d(img, pred_B, pred_L) #draw box after training
+        #draw_rect2d(img, pred_B, pred_L) #draw box after training
         print()
         # calc mAP
         sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL,targetC], 0.7)

@@ -412,7 +412,7 @@ class TransFuser(nn.Module):
 
     def forward(self, input):# image_list, lidar_list): 
         #image_list, lidar_list = input
-        fused_features = self.encoder(input)#(image_list, lidar_list)        
+        fused_features = self.encoder(input,mode='rgb')#(image_list, lidar_list)        
         #fused_features = self.encoder(input)
         return fused_features
 
