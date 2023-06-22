@@ -6,6 +6,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torchvision import models
+from Fusion_operators.mfbv3 import *
+#from Fusion_operators.Bgf import *
 
 
 class ImageCNN(nn.Module):
@@ -369,7 +371,19 @@ class Encoder(nn.Module):
             # fused_features = torch.cat([image_features, lidar_features], dim=1)
             # fused_features = torch.sum(fused_features, dim=1)
             #fused_featuremaps = torch.cat([image_features, lidar_features], dim=1)
-            fused_featuremaps = torch.add(image_features,lidar_features)
+
+            #####     FUSION PART   #####
+
+            #summation
+            #fused_featuremaps = torch.add(image_features,lidar_features)
+
+            #MFB
+            
+            fusion=Fusion_ops()
+            fused_featuremaps= fusion.MFBv3(image_features.cpu(),lidar_features.cpu(),0)
+            a=2
+            #BGF
+            #fused_featuremaps=
 
         elif mode == 'rgb' or mode == 'bev':
             if mode == 'rgb':
@@ -399,6 +413,7 @@ class Encoder(nn.Module):
         return fused_featuremaps
 
 
+
 class TransFuser(nn.Module):
     def __init__(self, config, device):
         super().__init__()
@@ -412,7 +427,12 @@ class TransFuser(nn.Module):
 
     def forward(self, input):# image_list, lidar_list): 
         #image_list, lidar_list = input
-        fused_features = self.encoder(input,mode='rgb')#(image_list, lidar_list)        
+
+        #### RGB mode #####
+        #fused_features = self.encoder(input,mode='rgb')#(image_list, lidar_list)        
+
+        #### Fusion Mode   ###
+        fused_features = self.encoder(input)#(image_list, lidar_list)
         #fused_features = self.encoder(input)
         return fused_features
 

@@ -8,6 +8,7 @@ class Fusion_ops:
         KernelS =3
         self.bev_fc1 =nn.ModuleList()
         self.cyl_fc1 =nn.ModuleList()
+        #self.cyl_fc1.cuda()
         self.bev_fc2=nn.ModuleList()
         self.cyl_fc2=nn.ModuleList()
         self.bev_att_path =nn.ModuleList()
@@ -18,15 +19,17 @@ class Fusion_ops:
         #for i, num_blocks in enumerate(self.stage_blocks): 
         
         for i in range(1): 
-                num_filters  =  6 * 2**i
-                inoutfilter = 3 * 2**i
+                #num_filters  =  6 * 2**i
+                num_filters=256
+                inoutfilter=256
+                #inoutfilter = 3 * 2**i
                 self.bev_fc1.append(nn.Sequential(
                     nn.Conv2d(inoutfilter, num_filters, KernelS, stride=1, padding=pds, bias=False),
                     nn.BatchNorm2d(num_filters),
                     #nn.ReLU(inplace=True)
                 ))
 
-                self.cyl_fc1 .append(nn.Sequential(
+                self.cyl_fc1.append(nn.Sequential(
                     nn.Conv2d(inoutfilter, num_filters, KernelS, stride=1, padding=pds, bias=False),
                     nn.BatchNorm2d(num_filters),
                     #nn.ReLU(inplace=True)
