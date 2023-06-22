@@ -8,4 +8,13 @@ gcc 11.2.0
 
 ### train and test
 For the training FasterRCNNTrain.py file should be run.
-Also, test_categorized.py should be run for evaluation(testing) on the test dataset. 
+Also, test_categorized.py should be run for evaluation(testing) on the test dataset.
+
+#### rgb to fusion
+TransfuserModel.py, class Transfuser, def forward
+
+#### changing fusion operators
+TransfuserModel.py, class Encoder, def forward
+
+#### num input feature is changing (3 to 18)
+TransfuserModel.py, class Encoder, self.lidar_encoder
