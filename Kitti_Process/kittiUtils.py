@@ -6,8 +6,8 @@ from PIL import Image
 
 def roty(t):
     """ Rotation about the y-axis. """
-    c = np.cos(t)
-    s = np.sin(t)
+    c = np.cos(float(t))
+    s = np.sin(float(t))
     return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
 
 def project_to_image(pts_3d, P):
@@ -40,9 +40,9 @@ def compute_box_3d(obj, P):
     R = roty(obj[7])
 
     # 3d bounding box dimensions
-    l = obj[6]
-    w = obj[5]
-    h = obj[4]
+    l = float(obj[6])
+    w = float(obj[5])
+    h = float(obj[4])
 
     # 3d bounding box corners
     x_corners = [l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2]
@@ -52,17 +52,19 @@ def compute_box_3d(obj, P):
     # rotate and translate 3d bounding box
     corners_3d = np.dot(R, np.vstack([x_corners, y_corners, z_corners]))
     # print corners_3d.shape
-    corners_3d[0, :] = corners_3d[0, :] + obj[1]
-    corners_3d[1, :] = corners_3d[1, :] + obj[2]
-    corners_3d[2, :] = corners_3d[2, :] + obj[3]
+    corners_3d[0, :] = corners_3d[0, :] + float(obj[1])
+    corners_3d[1, :] = corners_3d[1, :] + float(obj[2])
+    corners_3d[2, :] = corners_3d[2, :] + float(obj[3])
     # print 'cornsers_3d: ', corners_3d
     # only draw 3d bounding box for objs in front of the camera
-    if np.any(corners_3d[2, :] < 0.1):
-        corners_2d = None
-        return np.transpose(corners_3d) #corners_2d, 
+    # if np.any(corners_3d[2, :] < 0.1):
+    #     corners_2d = None
+    #     return corners_2d, np.transpose(corners_3d), 
 
     # project the 3d bounding box into the image plane
     corners_2d = project_to_image(np.transpose(corners_3d), P)
     # print 'corners_2d: ', corners_2d
     res = np.transpose(corners_3d)
-    return res #corners_2d, 
+    return res ,corners_2d
+
+

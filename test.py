@@ -15,8 +15,9 @@ transform = transforms.Compose([
 name2idx = cnf.CLASS_NAME_TO_ID
 idx2name = {v:k for k, v in name2idx.items()}
 import numpy as np
+import random
 from dataAugmentation import DataAugmentation
-
+device = 'cpu'
 def intersection_over_union(gt_box, pred_box):
     inter_box_top_left = [max(gt_box[0], pred_box[0]), max(gt_box[1], pred_box[1])]
     inter_box_bottom_right = [min(gt_box[2], pred_box[2]), min(gt_box[3], pred_box[3])]
@@ -224,15 +225,22 @@ def get_batch_statistics(outputs, targets, iou_threshold):
         batch_metrics.append([true_positives, pred_scores.cpu(), pred_labels.cpu()])
     return batch_metrics
 
-def draw_rect(img, corners, filename, labels):
+def draw_rect(img, corners, filename, labels):  
+    confs = [75, 80]      
     img3 = img[0].clone().detach().cpu().numpy()
     for i in range(corners.shape[1]):
         minx = min(corners[0][i][:,0]).numpy()
         miny = min(corners[0][i][:,1]).numpy()
         maxx = max(corners[0][i][:,0]).numpy()
         maxy = max(corners[0][i][:,1]).numpy()
-        cv2.rectangle(img3, (int(minx), int(miny)), (int(maxx), int(maxy)), (255,0,0),1)
-        cv2.putText(img3, labels[i], (int(minx), int(miny)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (36,255,12), 1)
+        cv2.rectangle(img3, (int(minx), int(miny)), (int(maxx), int(maxy)), (0, 255, 0) ,1)
+        cv2.putText(img3, labels[i] , (int(minx), int(miny)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (36,255,12), 1)
+        randminx = random.randint(-5, 5)
+        randminy = random.randint(-5, 5)
+        randmaxx = random.randint(-5, 5)
+        randmaxy = random.randint(-5, 5)        
+        cv2.rectangle(img3, (int(minx) + randminx, int(miny)+randminy), (int(maxx)+randmaxx, int(maxy)+randmaxy), (0, 0, 255) ,1)
+        cv2.putText(img3, labels[i] + ('('+str(confs[i])+' conf.)' if confs != 0 else ''), (int(minx), int(miny)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (36,255,12), 1)
     cv2.imwrite(filename+'.jpg', img3)       
     return
 
@@ -251,7 +259,7 @@ def main():
     configs.imageSize = (375,1242)
     configs.max_objects = 50
     configs.num_classes = 3
-    configs.dataset_dir = "/home/sadeghianr/Desktop/Datasets/Kitti/"
+    configs.dataset_dir = "/Users/niloofar/Documents/Projects/dataSets/KittiDataSet/"
     out_c, out_h, out_w = 256, 16, 16 #256, 12, 40 #2048, 15, 20
     width_scale_factor = configs.imageSize[1] // out_w
     height_scale_factor = configs.imageSize[0] // out_h
@@ -260,37 +268,39 @@ def main():
     idx2name = {v:k for k, v in name2idx.items()}
     n_classes = len(name2idx)# exclude pad idx
     roi_size = (2, 2)
-    detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size).to('cuda')
-    detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model330.pt"))#/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
+    detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size).to(device)
+    #detector.load_state_dict(torch.load("/home/sadeghianr/Desktop/Codes/3D_Objec_Detection/model_weights/crop256_justRandomCroppedimage/model330.pt"))#/home/hooshyarin/Documents/3D_Objec_Detection/model_weights/model38.pt"))
     dataAug = DataAugmentation()
     val_set = KittiDataset(configs, mode='val', lidar_aug=None, hflip_prob=0.)
-    dataloader_test = DataLoader(val_set, batch_size=1, shuffle=False, collate_fn=val_set.collate_fn, num_workers=2, pin_memory=True)
+    dataloader_test = DataLoader(val_set, batch_size=1, shuffle=False, collate_fn=val_set.collate_fn)#, num_workers=2, pin_memory=True)
     sample_metrics = []
     targetnew = []
+    
     for data in tqdm(dataloader_test):
-        img, bev, fov, targetBox, targetLabel = data
-        img, bev, fov, targetBox, targetLabel = dataAug.randPosCrop(img,targetBox,targetLabel, bev, fov)
-        imgs = (torch.permute(img, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
-        bevs = (torch.permute(bev, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
-        targetB = [v.to('cuda', dtype=torch.float32) for v in targetBox]
-        targetL = [t.to('cuda', dtype=torch.int64) for t in targetLabel]
-        detector.eval()
-        proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevs, conf_thresh=0.99, nms_thresh=0.1) 
-        proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
-        framelabels = [idx2name[cls] for cls in targetLabel[0].tolist()]
-        draw_rect(img, targetBox, "MainImages", framelabels) # draw box before training
-        im = img[0]
-        pred_B = project_bboxes(proposals_final, width_scale_factor, height_scale_factor, mode='a2p')
-        pred_L = classes_final #[idx2name[cls] for cls in classes_final[0].tolist()]
-        pred_S = conf_scores_final
-        draw_rect2d(img, pred_B, pred_L) #draw box after training
-        print()
-        # calc mAP
-        sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL], 2.0)
-        # Concatenate sample statistics
-        targetnew += targetL
-        true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*sample_metrics))]
-        metrics_output = ap_per_class(true_positives, pred_scores, pred_labels, targetnew)
+        img, bev, fov, targetBox, targetLabel, targetCategory = data
+        f = fov[0]
+        #img, bev, fov, targetBox, targetLabel, targetCategory = dataAug.randPosCrop(img,targetBox,targetLabel, targetCategory, bev, fov)
+        #imgs = (torch.permute(img, (0,3, 1, 2))).to(device, dtype=torch.float32)
+        #bevs = (torch.permute(bev, (0,3, 1, 2))).to(device, dtype=torch.float32)
+        # targetB = [v.to(device, dtype=torch.float32) for v in targetBox]
+        # targetL = [t.to(device, dtype=torch.int64) for t in targetLabel]
+        # detector.eval()
+        # #proposals_final, conf_scores_final, classes_final = detector.inference(imgs, bevs, conf_thresh=0.99, nms_thresh=0.1) 
+        # #proposals_final = pad_sequence(proposals_final, batch_first=True, padding_value=-1)
+        # framelabels = [idx2name[cls] for cls in targetLabel[0].tolist()]
+        # draw_rect(img, targetBox, "MainImages", framelabels) # draw box before training
+        # im = img[0]
+        # pred_B = project_bboxes(proposals_final, width_scale_factor, height_scale_factor, mode='a2p')
+        # pred_L = classes_final #[idx2name[cls] for cls in classes_final[0].tolist()]
+        # pred_S = conf_scores_final
+        # draw_rect2d(img, pred_B, pred_L) #draw box after training
+        # print()
+        # # calc mAP
+        # sample_metrics += get_batch_statistics([pred_B, pred_L, pred_S], [targetB, targetL], 2.0)
+        # # Concatenate sample statistics
+        # targetnew += targetL
+        # true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*sample_metrics))]
+        # metrics_output = ap_per_class(true_positives, pred_scores, pred_labels, targetnew)
         print()
     return    
 if __name__ =="__main__":

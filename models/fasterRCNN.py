@@ -8,8 +8,9 @@ from torch.nn.utils.rnn import pad_sequence
 from utils import *
 from models.TransfuserModel import TransFuser
 from config.Transfuse_config import GlobalConfig
+#from models.EfficientNet import efficientformerv2_s1_feat, efficientformerv2_s2_feat, efficientformerv2_l_feat
 
-Device = 'cuda'
+Device = 'cpu'
 # -------------------- Models -----------------------
 
 class FeatureExtractor(nn.Module):
@@ -22,6 +23,8 @@ class FeatureExtractor(nn.Module):
         #     param[1].requires_grad = True
         config = GlobalConfig()
         model = TransFuser(config, Device)
+        # if we want to use the efficient former as the feature extractor
+        #model = efficientformerv2_s1_feat()
         self.backbone = model
         print(model)
 

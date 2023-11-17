@@ -7,9 +7,65 @@ from torch import nn
 import torch.nn.functional as F
 from torchvision import models
 from Fusion_operators.mfbv3 import *
+#import ConvMixer
 #from Fusion_operators.Bgf import *
 
+import torch.nn as nn
 
+class Residual(nn.Module):
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    def forward(self, x):
+        return self.fn(x) + x
+
+def ConvMixer(dim, depth, kernel_size=9, patch_size=7,in_channels=3, n_classes=1000):
+    return nn.Sequential(
+        nn.Conv2d(in_channels, dim, kernel_size=patch_size, stride=patch_size),
+        nn.GELU(),
+        nn.BatchNorm2d(dim),
+        *[nn.Sequential(
+                Residual(nn.Sequential(
+                    nn.Conv2d(dim, dim, kernel_size, groups=dim, padding="same"),
+                    nn.GELU(),
+                    nn.BatchNorm2d(dim)
+                )),
+                nn.Conv2d(dim, dim, kernel_size=1),
+                nn.GELU(),
+                nn.BatchNorm2d(dim)
+        ) for i in range(depth)],
+        #nn.AdaptiveAvgPool2d((1,1)),
+        #nn.Flatten(),
+        #nn.Linear(dim, n_classes)
+    )
+    
+class ConvMixer(nn.Module):
+    def __init__(self,dim, depth, kernel_size=9, patch_size=7,in_channels=3, n_classes=1000):
+        super().__init__()
+        self.model = nn.Sequential()
+        self.initLayer = nn.Conv2d(in_channels, dim, kernel_size=patch_size, stride=patch_size)
+        self.activation = nn.GELU()
+        self.batchNorm = nn.BatchNorm2d(dim)
+        self.feature1 = nn.Sequential(
+                Residual(nn.Sequential(
+                    nn.Conv2d(dim, dim, kernel_size, groups=dim, padding="same"),
+                    nn.GELU(),
+                    nn.BatchNorm2d(dim)
+                )),
+                nn.Conv2d(dim, dim, kernel_size=1),
+                nn.GELU(),
+                nn.BatchNorm2d(dim))
+        
+    def forward(self,x):
+        out = self.initLayer(x)
+        outactivation = self.activation(out)
+        outbatchnorm = self.batchNorm(outactivation)
+        outfeature1  = self.feature1(outbatchnorm)
+        return outfeature1   
+
+        
+    
 class ImageCNN(nn.Module):
 
     def __init__(self, c_dim, normalize=True):
@@ -235,14 +291,21 @@ class Encoder(nn.Module):
         super().__init__()
         self.config = config
         self.avgpool = nn.AdaptiveAvgPool2d((self.config.vert_anchors, self.config.horz_anchors))    
-        self.image_encoder = ImageCNN(512, normalize=True)
-
-        ## BEV
-        #self.lidar_encoder = LidarEncoder(num_classes=512, in_channels=15)
-
-
-        ## FOV
-        self.lidar_encoder = LidarEncoder(num_classes=512, in_channels=18)
+        self.config = config
+        if self.config.use_convMixEncoder:
+            self.image_encoderf1 = ConvMixer(64,1,4,4,in_channels=3)
+            self.image_encoderf2 = ConvMixer(128,1,8,8,in_channels=3)
+            self.image_encoderf3 = ConvMixer(256,1,16,16,in_channels=3)
+            pytorch_total_params = sum(p.numel() for p in self.image_encoderf1.parameters() if p.requires_grad)
+            self.lidar_encoderf1 = ConvMixer(64,1,4,4, in_channels=18)
+            self.lidar_encoderf2 = ConvMixer(128,1,8,8, in_channels=18)
+            self.lidar_encoderf3 = ConvMixer(256,1,16,16, in_channels=18)
+            pytorch_total_params2 = sum(p.numel() for p in self.lidar_encoderf1.parameters() if p.requires_grad)
+        else:    
+            self.image_encoder = ImageCNN(512, normalize=True)
+            pytorch_total_params3 = sum(p.numel() for p in self.image_encoder.parameters() if p.requires_grad)
+            self.lidar_encoder = LidarEncoder(num_classes=512, in_channels=18)
+            pytorch_total_params4 = sum(p.numel() for p in self.lidar_encoder.parameters() if p.requires_grad)
         
         self.transformer1 = GPT(n_embd=64,
                             n_head=config.n_head, 
@@ -266,37 +329,15 @@ class Encoder(nn.Module):
                             attn_pdrop=config.attn_pdrop, 
                             resid_pdrop=config.resid_pdrop,
                             config=config)
-        # self.transformer3 = GPT(n_embd=256,
-        #                     n_head=config.n_head, 
-        #                     block_exp=config.block_exp, 
-        #                     n_layer=config.n_layer, 
-        #                     vert_anchors=config.vert_anchors, 
-        #                     horz_anchors=config.horz_anchors, 
-        #                     seq_len=config.seq_len, 
-        #                     embd_pdrop=config.embd_pdrop, 
-        #                     attn_pdrop=config.attn_pdrop, 
-        #                     resid_pdrop=config.resid_pdrop,
-        #                     config=config)
-        # self.transformer4 = GPT(n_embd=512,
-        #                     n_head=config.n_head, 
-        #                     block_exp=config.block_exp, 
-        #                     n_layer=config.n_layer, 
-        #                     vert_anchors=config.vert_anchors, 
-        #                     horz_anchors=config.horz_anchors, 
-        #                     seq_len=config.seq_len, 
-        #                     embd_pdrop=config.embd_pdrop, 
-        #                     attn_pdrop=config.attn_pdrop, 
-        #                     resid_pdrop=config.resid_pdrop,
-        #                     config=config)
 
         
     def forward(self, input, mode = 'fuse'):#, velocity):
  
         if mode == 'fuse': 
             image_list, lidar_list = input
-            if self.image_encoder.normalize:
-                image_list = [normalize_imagenet(image_input) for image_input in image_list]
-                image_list = torch.stack(image_list)
+            #if self.image_encoder.normalize:
+            image_list = [normalize_imagenet(image_input) for image_input in image_list]
+            image_list = torch.stack(image_list)
             bz, _, h, w = lidar_list.shape
             img_channel = image_list.shape[1]
             lidar_channel = lidar_list.shape[1]
@@ -305,18 +346,22 @@ class Encoder(nn.Module):
             image_tensor = image_list #torch.stack(image_list, dim=1).view(bz * self.config.n_views * self.config.seq_len, img_channel, h, w)
             lidar_tensor = lidar_list #torch.stack(lidar_list, dim=1).view(bz * self.config.seq_len, lidar_channel, h, w)
 
-            image_features = self.image_encoder.features.conv1(image_tensor)
-            image_features = self.image_encoder.features.bn1(image_features)
-            image_features = self.image_encoder.features.relu(image_features)
-            image_features = self.image_encoder.features.maxpool(image_features)
+            if self.config.use_convMixEncoder:
+                image_features = self.image_encoderf1(image_tensor)
+                lidar_features = self.lidar_encoderf1(lidar_tensor)
+            else:                    
+                image_features = self.image_encoder.features.conv1(image_tensor)
+                image_features = self.image_encoder.features.bn1(image_features)
+                image_features = self.image_encoder.features.relu(image_features)
+                image_features = self.image_encoder.features.maxpool(image_features)
 
-            lidar_features = self.lidar_encoder._model.conv1(lidar_tensor)
-            lidar_features = self.lidar_encoder._model.bn1(lidar_features)
-            lidar_features = self.lidar_encoder._model.relu(lidar_features)
-            lidar_features = self.lidar_encoder._model.maxpool(lidar_features)
+                lidar_features = self.lidar_encoder._model.conv1(lidar_tensor)
+                lidar_features = self.lidar_encoder._model.bn1(lidar_features)
+                lidar_features = self.lidar_encoder._model.relu(lidar_features)
+                lidar_features = self.lidar_encoder._model.maxpool(lidar_features)
 
-            image_features = self.image_encoder.features.layer1(image_features)
-            lidar_features = self.lidar_encoder._model.layer1(lidar_features)
+                image_features = self.image_encoder.features.layer1(image_features)
+                lidar_features = self.lidar_encoder._model.layer1(lidar_features)
             # fusion at (B, 64, 64, 64)
             image_embd_layer1 = self.avgpool(image_features)
             lidar_embd_layer1 = self.avgpool(lidar_features)
@@ -328,8 +373,12 @@ class Encoder(nn.Module):
             image_features = image_features + image_features_layer1
             lidar_features = lidar_features + lidar_features_layer1
 
-            image_features = self.image_encoder.features.layer2(image_features)
-            lidar_features = self.lidar_encoder._model.layer2(lidar_features)
+            if self.config.use_convMixEncoder:
+                image_features = self.image_encoderf2(image_tensor)
+                lidar_features = self.lidar_encoderf2(lidar_tensor)
+            else:
+                image_features = self.image_encoder.features.layer2(image_features)
+                lidar_features = self.lidar_encoder._model.layer2(lidar_features)
             # fusion at (B, 128, 32, 32)
             image_embd_layer2 = self.avgpool(image_features)
             lidar_embd_layer2 = self.avgpool(lidar_features)
@@ -341,8 +390,12 @@ class Encoder(nn.Module):
             image_features = image_features + image_features_layer2
             lidar_features = lidar_features + lidar_features_layer2
 
-            image_features = self.image_encoder.features.layer3(image_features)
-            lidar_features = self.lidar_encoder._model.layer3(lidar_features)
+            if self.config.use_convMixEncoder:
+                image_features = self.image_encoderf3(image_tensor)
+                lidar_features = self.lidar_encoderf3(lidar_tensor)
+            else:
+                image_features = self.image_encoder.features.layer3(image_features)
+                lidar_features = self.lidar_encoder._model.layer3(lidar_features)
             # fusion at (B, 256, 16, 16)
             # image_embd_layer3 = self.avgpool(image_features)
             # lidar_embd_layer3 = self.avgpool(lidar_features)

@@ -29,7 +29,7 @@ from dataAugmentation import DataAugmentation
 writer = SummaryWriter()
 
 parser.add_argument('--id', type=str, default='transfuser', help='Unique experiment identifier.')
-parser.add_argument('--device', type=str, default='cuda', help='Device to use')
+parser.add_argument('--device', type=str, default='cpu', help='Device to use') #mps is used to use AMD graphic card
 parser.add_argument('--epochs', type=int, default=101, help='Number of train epochs.')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate.')
 parser.add_argument('--val_every', type=int, default=5, help='Validation frequency (epochs).')
@@ -41,15 +41,15 @@ configs = edict()
 configs.hm_size = (152, 152)  #RRRR### marboot be config
 configs.max_objects = 50
 configs.num_classes = 3
-configs.dataset_dir = "/home/sadeghianr/Desktop/Datasets/Kitti/"
+configs.dataset_dir = "/Users/niloofar/Documents/Projects/dataSets/KittiDataSet/"
 configs.imageSize =  (375,1242)#(256,256) # (375,1242)(192, 640)    ##RRRR###
 train_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
 test_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
 print('number of train samples: ', len(train_set))
 print('number of test samples: ', len(train_set))
 
-dataloader_train = DataLoader(train_set, batch_size=8, shuffle=True,collate_fn=train_set.collate_fn, num_workers=8, pin_memory=True)
-dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=train_set.collate_fn, num_workers=8, pin_memory=True)
+dataloader_train = DataLoader(train_set, batch_size=8, shuffle=True,collate_fn=train_set.collate_fn)#, num_workers=8, pin_memory=True)
+dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=train_set.collate_fn)#, num_workers=8, pin_memory=True)
 
 # create anchor boxes
 anc_scales = [2, 4, 6]
@@ -133,7 +133,7 @@ if TrainMode:
 
 
         bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)
-        fovs= (torch.permute(fov, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
+        fovs= (torch.permute(fov, (0,3, 1, 2))).to(args.device, dtype=torch.float32)
 
         #concatenate the bev and fov
         bevCatfov = torch.cat((bevs,fovs),1)
@@ -174,7 +174,7 @@ for data in tqdm(dataloader_test):
      print()
   imgs = (torch.permute(img, (0,3, 1, 2))).to(args.device, dtype=torch.float32)
   bevs = torch.permute(bev, (0,3, 1, 2)).to(args.device, dtype=torch.float32)#(transform
-  fovs= (torch.permute(fov, (0,3, 1, 2))).to('cuda', dtype=torch.float32)
+  fovs= (torch.permute(fov, (0,3, 1, 2))).to(args.device, dtype=torch.float32)
   targetB = [v.to(args.device, dtype=torch.float32) for v in targetBox]
   targetL = [t.to(args.device, dtype=torch.int64) for t in targetLabel]
   detector.eval()

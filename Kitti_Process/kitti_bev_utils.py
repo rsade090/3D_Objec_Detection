@@ -6,6 +6,7 @@ import sys
 import cv2
 import numpy as np
 import config.kitti_config as cnf
+from Kitti_Process.kittiUtils import compute_box_3d
 
 TOP_Y_MIN = -30
 TOP_Y_MAX = +30
@@ -103,7 +104,7 @@ def draw_box3d_on_top(image, boxes3d, color=(255, 255, 255), thickness=1, scores
     # print(scores.shape)
     # scores=scores[:,0]
     font = cv2.FONT_HERSHEY_SIMPLEX
-    img = image.copy()
+    img = image.numpy().copy()
     num = len(boxes3d)
     startx = 5
     for n in range(num):
@@ -190,6 +191,34 @@ def get_corners(x, y, w, l, yaw):
     bev_corners[3, 1] = y + w / 2 * sin_yaw + l / 2 * cos_yaw
 
     return bev_corners
+
+
+def show_lidar_topview_with_boxes(top_image, objects, calib, objects_pred=None):
+
+    print("top_image:", top_image.shape)
+    def bbox3d(obj):
+        box3d_pts_3d, box2d_pts_2d = compute_box_3d(obj, calib.P2) 
+        box3d_pts_3d_velo = calib.project_rect_to_velo(box3d_pts_3d)
+        return box3d_pts_3d_velo
+
+    boxes3d = [bbox3d(obj) for obj in objects if obj[0] != "DontCare"]
+    gt = np.array(boxes3d)
+    # print("box2d BV:",boxes3d)
+    lines = [obj[0] for obj in objects if obj[0] != "DontCare"]
+    top_image = draw_box3d_on_top(
+        top_image, gt, text_lables=lines, scores=None, thickness=1, is_gt=True
+    )
+    # pred
+    if objects_pred is not None:
+        boxes3d = [bbox3d(obj) for obj in objects_pred if obj.type != "DontCare"]
+        gt = np.array(boxes3d)
+        lines = [obj[0] for obj in objects_pred if obj[0] != "DontCare"]
+        top_image = draw_box3d_on_top(
+            top_image, gt, text_lables=lines, scores=None, thickness=1, is_gt=False
+        )
+
+    #cv2.imshow("top_image", top_image)
+    return top_image
 
 
 def drawRotatedBox(img, x, y, w, l, yaw, color):

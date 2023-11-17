@@ -65,6 +65,8 @@ class GlobalConfig:
     brake_ratio = 1.1 # ratio of speed to desired speed at which brake is triggered
     clip_delta = 0.25 # maximum change in speed input to logitudinal controller
 
+    use_convMixEncoder = True
+
     def __init__(self, **kwargs):
         for k,v in kwargs.items():
             setattr(self, k, v)

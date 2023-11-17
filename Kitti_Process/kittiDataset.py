@@ -9,7 +9,7 @@ import cv2
 import torch
 import torchvision
 from Kitti_Process.kitti_data_utils import gen_hm_radius, compute_radius, Calibration, get_filtered_lidar
-from Kitti_Process.kitti_bev_utils import makeBEVMap, drawRotatedBox, get_corners,lidar_to_top
+from Kitti_Process.kitti_bev_utils import makeBEVMap, drawRotatedBox, get_corners,lidar_to_top, show_lidar_topview_with_boxes
 import Kitti_Process.transformation as transformation
 import Kitti_Process.kitti_fov_utils as fov_utils 
 from config import kitti_config as cnf
@@ -43,8 +43,7 @@ class KittiDataset(Dataset):
         self.lidar_dir = os.path.join(self.dataset_dir, sub_folder, "velodyne")
         self.calib_dir = os.path.join(self.dataset_dir, sub_folder, "calib")
         self.label_dir = os.path.join(self.dataset_dir, sub_folder, "label_2")
-        split_txt_path = os.path.join(self.dataset_dir, 'ImageSets', '{}.txt'.format(mode))
-        self.sample_id_list = [int(x.strip()) for x in open(split_txt_path).readlines()]
+        self.sample_id_list = [int(x[:-4]) for x in os.listdir(self.image_dir)]
         self.num_samples = len(self.sample_id_list)
 
     def __len__(self):
@@ -67,6 +66,7 @@ class KittiDataset(Dataset):
         return bev_map, img_rgb, fov_maps
 
     def load_img_with_targets(self, index):
+        index = 77
         sample_id = int(self.sample_id_list[index])
         img_path = os.path.join(self.image_dir, '{:06d}.png'.format(sample_id))
         lidarData = self.get_lidar(sample_id)
@@ -78,16 +78,12 @@ class KittiDataset(Dataset):
         fov_maps = self.get_FOV(index)
         fov_maps= np.concatenate((fov_maps[0],fov_maps[1],fov_maps[2]), axis=2)
 
-        """
-        plt.figure(figsize = (20,8))
-        plt.imshow(np.squeeze(fov_maps[0]))
-        plt.figure(figsize = (20,8))
-        plt.imshow(np.squeeze(fov_maps[1]))
-        plt.figure(figsize = (20,8))
-        plt.imshow(np.squeeze(fov_maps[2]))
-        """
         img_rgb = cv2.resize(img_rgb, dsize=(self.imageSize[1],self.imageSize[0]), interpolation=cv2.INTER_LINEAR)
-        bev_map = torch.from_numpy(bev_map[0]) #torch.Tensor([torch.from_numpy(bevs) for bevs in bev_map])
+        bev_maps = torch.from_numpy(bev_map[0]) #torch.Tensor([torch.from_numpy(bevs) for bevs in bev_map])
+        bev_map_img = torch.from_numpy(bev_map[1])
+        #show_lidar_topview_with_boxes(bev_map_img, orig_label, calib, )
+        # draw labels on bev
+        
         fov_maps = torch.from_numpy(fov_maps)
         img_rgb = torch.from_numpy(img_rgb)
         gt_boxes_all = []
@@ -127,7 +123,7 @@ class KittiDataset(Dataset):
         gt_boxes_all = torch.stack(gt_boxes_all)    
         gt_idxs = torch.Tensor(gt_idxs)
         gt_category=torch.Tensor(gt_category)
-        return img_rgb, bev_map, fov_maps, gt_boxes_all, gt_idxs, gt_category
+        return img_rgb, bev_maps, fov_maps, gt_boxes_all, gt_idxs, gt_category
 
     def collate_fn(self, batch):
         images = list()
