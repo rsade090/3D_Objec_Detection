@@ -1,10 +1,19 @@
-# Object_Detection using data fusion
+Overview
 
-### requirements
-python 3.10.9,
-pytorch 1.13.1,
-Cuda 11.6,
-gcc 11.2.0
+TransfuseNet introduces an innovative fusion technique combining LiDAR and camera data to improve 2D object detection accuracy. This approach diverges from traditional methods by emphasizing self-attention within Transformers to efficiently process and integrate multimodal inputs. Our novel Multi-Convolutional Fusion (MCF) strategy, coupled with a Priority Gate, optimizes feature selection during fusion stages, leading to superior detection performance.
+
+Features
+
+- Transformer-based architecture for efficient multimodal data integration.
+- Novel Multi-Convolutional Fusion (MCF) strategy for enhanced feature extraction.
+- Comprehensive evaluation on KITTI benchmark datasets, demonstrating competitive performance against state-of-the-art methods.
+
+Requirements
+
+- Python 3.6+
+- PyTorch 1.7.1+
+- torchvision 0.8.2+
+- CUDA 10.1+ (For GPU acceleration)
 
 ### train and test
 For the training FasterRCNNTrain.py file should be run.
