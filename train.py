@@ -38,11 +38,11 @@ parser.add_argument('--logdir', type=str, default='log', help='Directory to log 
 
 args = parser.parse_args()
 configs = edict()
-configs.hm_size = (152, 152)  #RRRR### marboot be config
+configs.hm_size = (152, 152)
 configs.max_objects = 50
 configs.num_classes = 3
 configs.dataset_dir = "/Users/niloofar/Documents/Projects/dataSets/KittiDataSet/"
-configs.imageSize =  (375,1242)#(256,256) # (375,1242)(192, 640)    ##RRRR###
+configs.imageSize =  (375,1242)
 train_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
 test_set = KittiDataset(configs, mode='train', lidar_aug=None, hflip_prob=0.)
 print('number of train samples: ', len(train_set))
@@ -54,9 +54,9 @@ dataloader_test = DataLoader(test_set, batch_size=1, shuffle=False,collate_fn=tr
 # create anchor boxes
 anc_scales = [2, 4, 6]
 anc_ratios = [0.5, 1, 1.5]
-n_anc_boxes = len(anc_scales) * len(anc_ratios) # number of anchor boxes for each anchor point
-out_c, out_h, out_w = 256, 16, 16 #256, 12, 40 #2048, 15, 20      ##RRRR#### output transformer niyaz baraye twostage detector
-anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(out_h, out_w))   ##RRR###
+n_anc_boxes = len(anc_scales) * len(anc_ratios) 
+out_c, out_h, out_w = 256, 16, 16 
+anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(out_h, out_w))
 anc_base = gen_anc_base(anc_pts_x, anc_pts_y, anc_scales, anc_ratios, (out_h, out_w))
 
 width_scale_factor = configs.imageSize[1] // out_w
@@ -64,18 +64,13 @@ height_scale_factor = configs.imageSize[0] // out_h
 out_size = (out_h, out_w)
 name2idx = kittiCnf.CLASS_NAME_TO_ID
 idx2name = {v:k for k, v in name2idx.items()}
-n_classes = len(name2idx) #-1 # exclude pad idx
-roi_size = (2, 2)     ###RRRR### vase pooling
+n_classes = len(name2idx)
+roi_size = (2, 2)
 
 
 detector = TwoStageDetector(configs.imageSize, out_size, out_c, n_classes, roi_size)
 detector.to(args.device)
-optimizer = optim.Adam(detector.parameters(), lr=0.0001)
-#transform = transforms.Compose([
-  #transforms.Resize((216,640)),                         
-  #transforms.Resize((480,640)),
-  #transforms.RandomCrop(256)  ####RRRR####                       
-#])
+optimizer = optim.Adam(detector.parameters(), lr=0.001)
 transform = transforms.Compose([transforms.Resize((256,256)),])
 
 
@@ -85,9 +80,9 @@ param_count = count_parameters(detector)
 # number of trainable parameters -> 35848757
 
 
-BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3]] ##RRR### connection corner of cube
+BOX_CONNECTIONS = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [4, 0], [5, 1], [6, 2], [7, 3]]
 def draw_rect(img, corners, filename):
-  img3 = img[0] # vase namayesh dim 0 ke nehsndahandeye batch ast bardashte shode
+  img3 = img[0]
   for i in range(corners.shape[1]):
     minx = min(corners[0][i][:,0]).numpy()#corners [batch][box][coordinate]
     miny = min(corners[0][i][:,1]).numpy()
