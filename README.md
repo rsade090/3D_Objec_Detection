@@ -1,14 +1,14 @@
-Overview
+## Overview
 
 TransfuseNet introduces an innovative fusion technique combining LiDAR and camera data to improve 2D object detection accuracy. This approach diverges from traditional methods by emphasizing self-attention within Transformers to efficiently process and integrate multimodal inputs. Our novel Multi-Convolutional Fusion (MCF) strategy, coupled with a Priority Gate, optimizes feature selection during fusion stages, leading to superior detection performance.
 
-Features
+## Features
 
 - Transformer-based architecture for efficient multimodal data integration.
 - Novel Multi-Convolutional Fusion (MCF) strategy for enhanced feature extraction.
 - Comprehensive evaluation on KITTI benchmark datasets, demonstrating competitive performance against state-of-the-art methods.
 
-Requirements
+## Requirements
 
 - Python 3.6+
 - PyTorch 1.7.1+
